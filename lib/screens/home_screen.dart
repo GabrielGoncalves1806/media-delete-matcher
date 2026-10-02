@@ -5,6 +5,7 @@ import '../format.dart';
 import '../media/decision_store.dart';
 import '../media/media_library.dart';
 import '../theme.dart';
+import 'duplicates_screen.dart';
 import 'review_screen.dart';
 import 'swipe_screen.dart';
 
@@ -104,6 +105,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _load(); // algo pode ter ido pra lixeira
   }
 
+  Future<void> _openDuplicates() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DuplicatesScreen(library: widget.library, store: widget.store),
+      ),
+    );
+    _load();
+  }
+
   Future<void> _openReview() async {
     final trashed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -162,6 +172,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   '${_allSized ? ' · ${formatBytes(_totalBytes)}' : ''}',
               onTap: () => _openSwipe(all, 'Tudo'),
             ),
+          const SizedBox(height: 10),
+          _DuplicatesButton(onTap: _openDuplicates),
           const SizedBox(height: 20),
           const Text(
             'ÁLBUNS',
@@ -296,6 +308,46 @@ class _AllButton extends StatelessWidget {
             ),
             const Icon(Icons.chevron_right_rounded, color: Colors.white),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DuplicatesButton extends StatelessWidget {
+  const _DuplicatesButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Text('🔁', style: TextStyle(fontSize: 24)),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Duplicados', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                    Text(
+                      'Cópias idênticas, byte a byte',
+                      style: TextStyle(color: AppColors.muted, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+            ],
+          ),
         ),
       ),
     );
