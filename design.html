@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>media_swipe · Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0b0f;
+    --surface: #15151c;
+    --surface-2: #1e1e28;
+    --line: #2a2a36;
+    --text: #f2f2f5;
+    --muted: #8b8b99;
+    --del: #ff4d5e;
+    --del-soft: rgba(255, 77, 94, .14);
+    --keep: #2fd47a;
+    --keep-soft: rgba(47, 212, 122, .14);
+    --accent: #7c6cff;
+    --warn: #ffb020;
+    --radius: 18px;
+    --font: 'Inter', system-ui, sans-serif;
+    --display: 'Space Grotesk', 'Inter', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 1480px; margin: 0 auto; padding: 48px 16px 80px; }
+
+  /* ---------- Cabeçalho da página ---------- */
+  .hero { max-width: 720px; margin-bottom: 40px; }
+  .tag {
+    display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--accent); background: rgba(124,108,255,.12);
+    padding: 4px 10px; border-radius: 99px; margin-bottom: 14px;
+  }
+  .hero h1 { font-family: var(--display); font-size: clamp(32px, 6vw, 52px); line-height: 1.05; letter-spacing: -.02em; }
+  .hero h1 span { color: var(--del); }
+  .hero p { color: var(--muted); margin-top: 14px; font-size: 17px; }
+
+  h2.section {
+    font-family: var(--display); font-size: 22px; margin: 56px 0 6px; letter-spacing: -.01em;
+  }
+  p.section-sub { color: var(--muted); margin-bottom: 24px; }
+
+  /* ---------- Telas ---------- */
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 32px 24px;
+  }
+  .screen-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .screen-label { text-align: center; }
+  .screen-label b { display: block; font-size: 15px; }
+  .screen-label small { color: var(--muted); font-size: 13px; }
+  .step {
+    display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px;
+    border-radius: 50%; background: var(--surface-2); font-size: 12px; font-weight: 700; margin-right: 6px;
+  }
+
+  .phone {
+    width: 100%; max-width: 320px; height: 660px;
+    background: #000; border-radius: 44px; padding: 10px;
+    box-shadow: 0 0 0 1px var(--line), 0 30px 60px -20px rgba(0,0,0,.8);
+  }
+  .screen {
+    position: relative; height: 100%; border-radius: 34px; overflow: hidden;
+    background: var(--bg); display: flex; flex-direction: column;
+  }
+  .statusbar {
+    display: flex; justify-content: space-between; padding: 12px 22px 4px;
+    font-size: 12px; font-weight: 600; color: var(--text); flex-shrink: 0;
+  }
+  .content { flex: 1; overflow-y: auto; padding: 8px 16px 16px; scrollbar-width: none; }
+  .content::-webkit-scrollbar { display: none; }
+
+  .app-title { font-family: var(--display); font-size: 28px; font-weight: 700; letter-spacing: -.02em; margin: 6px 0 14px; }
+
+  /* Home */
+  .storage {
+    background: var(--surface); border-radius: var(--radius); padding: 16px; margin-bottom: 14px;
+  }
+  .storage-top { display: flex; justify-content: space-between; align-items: baseline; }
+  .storage-top b { font-family: var(--display); font-size: 22px; }
+  .storage-top span { color: var(--muted); font-size: 12px; }
+  .bar { height: 8px; background: var(--surface-2); border-radius: 99px; margin: 12px 0 8px; overflow: hidden; display: flex; }
+  .bar i { display: block; height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--muted); }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+  .free-warn { color: var(--del); font-weight: 600; font-size: 12px; margin-top: 8px; }
+
+  .cta {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    background: linear-gradient(135deg, var(--del), #ff7a45); color: #fff; border: 0;
+    border-radius: var(--radius); padding: 14px 16px; margin-bottom: 18px; text-align: left;
+    font-family: var(--font); cursor: pointer;
+  }
+  .cta .emoji { font-size: 26px; }
+  .cta b { display: block; font-size: 15px; }
+  .cta small { opacity: .85; font-size: 12px; }
+  .cta .arrow { margin-left: auto; font-size: 20px; }
+
+  .chips { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; scrollbar-width: none; }
+  .chip {
+    flex-shrink: 0; font-size: 12px; padding: 6px 12px; border-radius: 99px;
+    background: var(--surface); color: var(--muted); border: 1px solid var(--line);
+  }
+  .chip.on { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 600; }
+
+  .list-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+  .album {
+    display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid var(--line);
+  }
+  .album:last-child { border-bottom: 0; }
+  .album .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 18px; }
+  .album b { font-size: 14px; font-weight: 600; }
+  .album small { display: block; color: var(--muted); font-size: 12px; }
+  .album .size { font-family: var(--display); font-weight: 600; font-size: 14px; text-align: right; }
+  .album .mini { height: 3px; border-radius: 99px; background: var(--surface-2); margin-top: 6px; overflow: hidden; }
+  .album .mini i { display: block; height: 100%; background: var(--del); border-radius: 99px; }
+
+  /* Swipe */
+  .swipe-top { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 10px; flex-shrink: 0; }
+  .back { width: 34px; height: 34px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; font-size: 16px; }
+  .swipe-top .title { text-align: center; }
+  .swipe-top .title b { display: block; font-size: 14px; }
+  .swipe-top .title small { color: var(--muted); font-size: 11px; }
+  .pill {
+    font-size: 12px; font-weight: 700; padding: 6px 10px; border-radius: 99px;
+    background: var(--del-soft); color: var(--del); white-space: nowrap; cursor: pointer;
+  }
+  .deck { position: relative; flex: 1; margin: 0 16px; }
+  .card {
+    position: absolute; inset: 0; border-radius: 24px; overflow: hidden;
+    touch-action: none; user-select: none; cursor: grab;
+    box-shadow: 0 18px 40px -16px rgba(0,0,0,.9);
+    transition: transform .25s ease;
+  }
+  .card.dragging { transition: none; cursor: grabbing; }
+  .card .art { position: absolute; inset: 0; }
+  .card .art::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,.25), transparent 30%, transparent 55%, rgba(0,0,0,.85));
+  }
+  .card .kind {
+    position: absolute; top: 14px; left: 14px; z-index: 2;
+    font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 8px;
+    background: rgba(0,0,0,.5); backdrop-filter: blur(6px);
+  }
+  .card .bigsize {
+    position: absolute; top: 12px; right: 14px; z-index: 2;
+    font-family: var(--display); font-weight: 700; font-size: 20px;
+    text-shadow: 0 2px 8px rgba(0,0,0,.6);
+  }
+  .card .play {
+    position: absolute; left: 50%; top: 44%; transform: translate(-50%,-50%); z-index: 2;
+    width: 56px; height: 56px; border-radius: 50%; background: rgba(0,0,0,.35);
+    backdrop-filter: blur(6px); display: grid; place-items: center; font-size: 20px;
+  }
+  .card .meta { position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 2; }
+  .card .meta b { display: block; font-size: 15px; word-break: break-all; }
+  .card .meta small { color: rgba(255,255,255,.75); font-size: 12px; }
+  .card .timeline { height: 3px; background: rgba(255,255,255,.25); border-radius: 99px; margin-top: 10px; overflow: hidden; }
+  .card .timeline i { display: block; height: 100%; width: 34%; background: #fff; }
+  .stamp {
+    position: absolute; top: 56px; z-index: 3; padding: 6px 12px; border-radius: 10px;
+    font-family: var(--display); font-weight: 700; font-size: 24px; letter-spacing: .04em;
+    border: 3px solid; opacity: 0; pointer-events: none;
+  }
+  .stamp.del { right: 18px; color: var(--del); border-color: var(--del); transform: rotate(12deg); }
+  .stamp.keep { left: 18px; color: var(--keep); border-color: var(--keep); transform: rotate(-12deg); }
+  .deck-empty {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    border: 2px dashed var(--line); border-radius: 24px; color: var(--muted); padding: 24px;
+  }
+  .deck-empty b { display: block; color: var(--text); font-size: 18px; margin-bottom: 4px; }
+
+  .actions { display: flex; justify-content: center; align-items: center; gap: 18px; padding: 16px 0 6px; flex-shrink: 0; }
+  .btn-round {
+    border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+    background: var(--surface); font-family: var(--font); transition: transform .1s;
+  }
+  .btn-round:active { transform: scale(.92); }
+  .btn-round.big { width: 62px; height: 62px; font-size: 26px; }
+  .btn-round.small { width: 44px; height: 44px; font-size: 18px; color: var(--muted); }
+  .btn-round.del { color: var(--del); box-shadow: inset 0 0 0 2px var(--del-soft); }
+  .btn-round.keep { color: var(--keep); box-shadow: inset 0 0 0 2px var(--keep-soft); }
+  .hint { text-align: center; color: var(--muted); font-size: 11px; padding-bottom: 14px; flex-shrink: 0; }
+  .hint .l { color: var(--del); } .hint .r { color: var(--keep); }
+
+  /* Revisão */
+  .review-head { padding: 6px 16px 12px; flex-shrink: 0; }
+  .review-head .row { display: flex; align-items: center; gap: 12px; }
+  .review-head h3 { font-family: var(--display); font-size: 22px; }
+  .review-head p { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .review-head p b { color: var(--del); }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .thumb {
+    position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; cursor: pointer;
+  }
+  .thumb .art { position: absolute; inset: 0; }
+  .thumb .check {
+    position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; border-radius: 50%;
+    background: var(--del); display: grid; place-items: center; font-size: 11px; font-weight: 700;
+    box-shadow: 0 0 0 2px #fff;
+  }
+  .thumb .sz {
+    position: absolute; left: 5px; bottom: 4px; font-size: 10px; font-weight: 700;
+    text-shadow: 0 1px 4px rgba(0,0,0,.8);
+  }
+  .thumb .vid { position: absolute; right: 5px; bottom: 4px; font-size: 10px; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+  .thumb.off .check { background: rgba(0,0,0,.4); box-shadow: 0 0 0 2px rgba(255,255,255,.6); color: transparent; }
+  .thumb.off .art { opacity: .35; filter: grayscale(1); }
+  .review-foot { padding: 12px 16px 18px; background: linear-gradient(to top, var(--bg) 70%, transparent); flex-shrink: 0; }
+  .btn-main {
+    width: 100%; border: 0; border-radius: 16px; padding: 15px; cursor: pointer;
+    background: var(--del); color: #fff; font-family: var(--font); font-weight: 700; font-size: 15px;
+  }
+  .btn-main:disabled { opacity: .35; cursor: default; }
+  .foot-note { text-align: center; color: var(--muted); font-size: 11px; margin-top: 8px; }
+
+  /* Diálogo do sistema */
+  .dim { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; padding: 22px; z-index: 5; }
+  .sys-dialog {
+    background: #2b2930; border-radius: 28px; padding: 24px; width: 100%;
+    font-family: 'Roboto', system-ui, sans-serif;
+  }
+  .sys-dialog .sys-ico {
+    width: 40px; height: 40px; border-radius: 12px; margin: 0 auto 14px;
+    background: linear-gradient(135deg, var(--del), #ff7a45); display: grid; place-items: center; font-size: 20px;
+  }
+  .sys-dialog p { text-align: center; font-size: 17px; line-height: 1.35; color: #e6e1e5; }
+  .sys-dialog .thumbs { display: flex; justify-content: center; margin: 16px 0; }
+  .sys-dialog .thumbs span { width: 40px; height: 40px; border-radius: 8px; margin-left: -10px; box-shadow: 0 0 0 2px #2b2930; }
+  .sys-dialog .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+  .sys-dialog .btns span { color: #d0bcff; font-weight: 600; font-size: 14px; padding: 10px 12px; }
+  .sys-caption {
+    position: absolute; left: 16px; right: 16px; bottom: 18px; z-index: 6;
+    font-size: 11px; color: var(--muted); text-align: center;
+  }
+
+  /* Pronto */
+  .done { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; }
+  .done .ring {
+    width: 150px; height: 150px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 22px;
+    background: conic-gradient(var(--keep) 0 32%, var(--surface-2) 32% 100%);
+    position: relative;
+  }
+  .done .ring::before { content: ''; position: absolute; inset: 12px; border-radius: 50%; background: var(--bg); }
+  .done .ring span { position: relative; font-size: 42px; }
+  .done h3 { font-family: var(--display); font-size: 40px; line-height: 1; letter-spacing: -.02em; }
+  .done h3 small { display: block; font-size: 15px; color: var(--muted); font-family: var(--font); font-weight: 500; letter-spacing: 0; margin-top: 8px; }
+  .done .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin: 24px 0; }
+  .done .stats div { background: var(--surface); border-radius: 14px; padding: 12px; }
+  .done .stats b { font-family: var(--display); font-size: 18px; display: block; }
+  .done .stats small { color: var(--muted); font-size: 11px; }
+  .btn-ghost {
+    width: 100%; border: 1px solid var(--line); background: transparent; color: var(--text);
+    border-radius: 16px; padding: 13px; font-family: var(--font); font-weight: 600; margin-top: 8px; cursor: pointer;
+  }
+  .btn-keep { background: var(--keep); color: #04210f; }
+
+  /* ---------- Sistema de design ---------- */
+  .system { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .panel { background: var(--surface); border-radius: var(--radius); padding: 20px; }
+  .panel h4 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 14px; }
+  .swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .swatch i { display: block; height: 48px; border-radius: 10px; margin-bottom: 6px; box-shadow: inset 0 0 0 1px var(--line); }
+  .swatch b { font-size: 12px; display: block; }
+  .swatch small { font-size: 11px; color: var(--muted); font-family: monospace; }
+  .type-sample .d { font-family: var(--display); font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+  .type-sample .t { font-size: 15px; margin-top: 10px; }
+  .type-sample small { color: var(--muted); font-size: 12px; display: block; margin-top: 4px; }
+  .gest { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .gest td { padding: 8px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .gest tr:last-child td { border-bottom: 0; }
+  .gest td:first-child { width: 42%; font-weight: 600; }
+  .gest td:last-child { color: var(--muted); }
+  .rules { list-style: none; display: grid; gap: 12px; }
+  .rules li { display: grid; grid-template-columns: 28px 1fr; gap: 8px; font-size: 14px; }
+  .rules li span:first-child { font-size: 18px; }
+  .rules li b { display: block; }
+  .rules li small { color: var(--muted); }
+
+  footer { color: var(--muted); font-size: 13px; margin-top: 56px; text-align: center; }
+
+  @media (max-width: 400px) {
+    .phone { border-radius: 36px; height: 620px; }
+    .screen { border-radius: 28px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="hero">
+    <span class="tag">Proposta de design · v0</span>
+    <h1>media_swipe<br><span>←</span> apaga, mantém <span style="color:var(--keep)">→</span></h1>
+    <p>Um "Tinder de mídias" pro celular: passa por fotos e vídeos do maior pro menor, marca no swipe e só apaga no final, numa confirmação só. O que sai vai pra lixeira do sistema e dá pra recuperar por 30 dias.</p>
+  </header>
+
+  <h2 class="section">Fluxo</h2>
+  <p class="section-sub">A tela 2 funciona de verdade: arrasta a carta (ou usa as setas ← → e Z pra desfazer). A tela 3 atualiza junto.</p>
+
+  <div class="flow">
+
+    <!-- 1. Home -->
+    <div class="screen-wrap">
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span>● ● ▮</span></div>
+        <div class="content">
+          <div class="app-title">Mídias</div>
+
+          <div class="storage">
+            <div class="storage-top"><b>101 GB</b><span>de 102 GB usados</span></div>
+            <div class="bar">
+              <i style="width:31%;background:var(--del)"></i>
+              <i style="width:11%;background:var(--accent)"></i>
+              <i style="width:5%;background:var(--warn)"></i>
+              <i style="width:52%;background:#3a3a48"></i>
+            </div>
+            <div class="legend">
+              <span><i style="background:var(--del)"></i>WhatsApp</span>
+              <span><i style="background:var(--accent)"></i>Spotify</span>
+              <span><i style="background:var(--warn)"></i>Câmera</span>
+              <span><i style="background:#3a3a48"></i>Resto</span>
+            </div>
+            <div class="free-warn">⚠ só 847 MB livres</div>
+          </div>
+
+          <button class="cta">
+            <span class="emoji">🔥</span>
+            <span><b>Tudo, maiores primeiro</b><small>11.402 itens · 39,8 GB</small></span>
+            <span class="arrow">›</span>
+          </button>
+
+          <div class="chips">
+            <span class="chip on">Todos</span>
+            <span class="chip">Vídeos</span>
+            <span class="chip">Fotos</span>
+            <span class="chip">&gt; 50 MB</span>
+            <span class="chip">Por ano</span>
+          </div>
+
+          <div class="list-title">Álbuns</div>
+          <div id="albums"></div>
+        </div>
+      </div></div>
+      <div class="screen-label"><b><span class="step">1</span>Mapa da galeria</b><small>Onde tá o peso, em um olhar</small></div>
+    </div>
+
+    <!-- 2. Swipe -->
+    <div class="screen-wrap">
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span>● ● ▮</span></div>
+        <div class="swipe-top">
+          <div class="back">‹</div>
+          <div class="title"><b>Tudo</b><small id="progress">1 de 11.402</small></div>
+          <div class="pill" id="pill">🗑 0 · 0 MB</div>
+        </div>
+        <div class="deck" id="deck"></div>
+        <div class="actions">
+          <button class="btn-round big del" id="btnDel" title="Apagar (←)">✕</button>
+          <button class="btn-round small" id="btnUndo" title="Desfazer (Z)">↺</button>
+          <button class="btn-round big keep" id="btnKeep" title="Manter (→)">✓</button>
+        </div>
+        <div class="hint"><span class="l">← apagar</span> · toque = som · <span class="r">manter →</span></div>
+      </div></div>
+      <div class="screen-label"><b><span class="step">2</span>Swipe</b><small>Vídeo toca mudo em loop · nada apaga aqui</small></div>
+    </div>
+
+    <!-- 3. Revisão -->
+    <div class="screen-wrap">
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span>● ● ▮</span></div>
+        <div class="review-head">
+          <div class="row"><div class="back">‹</div><h3>Revisar</h3></div>
+          <p id="reviewSummary"></p>
+        </div>
+        <div class="content" style="padding-top:0"><div class="grid" id="grid"></div></div>
+        <div class="review-foot">
+          <button class="btn-main" id="btnTrash">Mover pra lixeira</button>
+          <div class="foot-note">Toca numa miniatura pra desmarcar · fica 30 dias na lixeira</div>
+        </div>
+      </div></div>
+      <div class="screen-label"><b><span class="step">3</span>Revisão</b><small>Última chance antes de confirmar</small></div>
+    </div>
+
+    <!-- 4. Diálogo do sistema -->
+    <div class="screen-wrap">
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span>● ● ▮</span></div>
+        <div class="review-head"><div class="row"><div class="back">‹</div><h3>Revisar</h3></div></div>
+        <div class="content" style="padding-top:0"><div class="grid" id="gridDim"></div></div>
+        <div class="dim">
+          <div class="sys-dialog">
+            <div class="sys-ico">🗑</div>
+            <p>Permitir que <b>media_swipe</b> mova <b id="dialogCount">0 itens</b> para a lixeira?</p>
+            <div class="thumbs" id="dialogThumbs"></div>
+            <div class="btns"><span>Cancelar</span><span>Permitir</span></div>
+          </div>
+        </div>
+        <div class="sys-caption">Diálogo nativo do Android (MediaStore.createTrashRequest) · um toque pra tudo</div>
+      </div></div>
+      <div class="screen-label"><b><span class="step">4</span>Confirmação do sistema</b><small>Vem do Android, não do app</small></div>
+    </div>
+
+    <!-- 5. Pronto -->
+    <div class="screen-wrap">
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>9:41</span><span>● ● ▮</span></div>
+        <div class="done">
+          <div class="ring"><span>🎉</span></div>
+          <h3 id="doneSize">0 MB<small>liberados agora</small></h3>
+          <div class="stats">
+            <div><b id="doneCount">0</b><small>na lixeira por 30 dias</small></div>
+            <div><b>32,6 GB</b><small>liberados no total</small></div>
+          </div>
+          <button class="btn-main btn-keep">Continuar swipando</button>
+          <button class="btn-ghost">Abrir lixeira</button>
+        </div>
+      </div></div>
+      <div class="screen-label"><b><span class="step">5</span>Pronto</b><small>Recompensa + histórico acumulado</small></div>
+    </div>
+
+  </div>
+
+  <h2 class="section">Sistema</h2>
+  <p class="section-sub">Escuro por padrão: a mídia é o conteúdo, a interface some.</p>
+
+  <div class="system">
+    <div class="panel">
+      <h4>Cores</h4>
+      <div class="swatches">
+        <div class="swatch"><i style="background:var(--del)"></i><b>Apagar</b><small>#FF4D5E</small></div>
+        <div class="swatch"><i style="background:var(--keep)"></i><b>Manter</b><small>#2FD47A</small></div>
+        <div class="swatch"><i style="background:var(--accent)"></i><b>Destaque</b><small>#7C6CFF</small></div>
+        <div class="swatch"><i style="background:var(--bg)"></i><b>Fundo</b><small>#0B0B0F</small></div>
+        <div class="swatch"><i style="background:var(--surface)"></i><b>Superfície</b><small>#15151C</small></div>
+        <div class="swatch"><i style="background:var(--warn)"></i><b>Alerta</b><small>#FFB020</small></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h4>Tipografia</h4>
+      <div class="type-sample">
+        <div class="d">25,3 GB</div>
+        <small>Space Grotesk 700: números e títulos</small>
+        <div class="t">VID-20240512-WA0031.mp4 · 12 mai 2024</div>
+        <small>Inter 400–700: todo o resto</small>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h4>Gestos</h4>
+      <table class="gest">
+        <tr><td>Swipe ←</td><td>Marca pra apagar</td></tr>
+        <tr><td>Swipe →</td><td>Mantém (não aparece de novo)</td></tr>
+        <tr><td>Toque</td><td>Liga o som / pausa o vídeo</td></tr>
+        <tr><td>Segurar</td><td>Tela cheia com zoom</td></tr>
+        <tr><td>↺</td><td>Desfaz a última decisão</td></tr>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h4>Regras do produto</h4>
+      <ul class="rules">
+        <li><span>🛡</span><span><b>Nada apaga durante o swipe</b><small>Só na revisão, com o diálogo do sistema.</small></span></li>
+        <li><span>📏</span><span><b>Maiores primeiro</b><small>Os primeiros swipes são os que mais liberam espaço.</small></span></li>
+        <li><span>♻</span><span><b>Lixeira, não exclusão</b><small>30 dias pra se arrepender. Testar na MIUI antes.</small></span></li>
+        <li><span>💾</span><span><b>Progresso salvo</b><small>Fechou no meio? Volta de onde parou.</small></span></li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>media_swipe · proposta de design v0 · Flutter + photo_manager</footer>
+</div>
+
+<script>
+  // ---------- Dados de exemplo (baseados na varredura real do celular) ----------
+  const ALBUMS = [
+    { name: 'WhatsApp Video', count: '3.286 vídeos', size: 25.3, ico: '🎬', color: '#ff4d5e' },
+    { name: 'Camera', count: '1.912 itens', size: 4.2, ico: '📷', color: '#ffb020' },
+    { name: 'WhatsApp Images', count: '7.831 fotos', size: 3.6, ico: '🖼', color: '#2fd47a' },
+    { name: 'Screenshots', count: '1.204 prints', size: 0.37, ico: '📱', color: '#7c6cff' },
+    { name: 'Movies/WhatsApp', count: '41 vídeos', size: 0.29, ico: '🎞', color: '#3fb6ff' },
+    { name: 'ScreenRecorder', count: '18 vídeos', size: 0.17, ico: '⏺', color: '#ff7a45' },
+    { name: 'Instagram', count: '96 itens', size: 0.15, ico: '◎', color: '#e14bd7' },
+  ];
+
+  const HUES = [[350, 20], [260, 300], [190, 230], [30, 60], [140, 180], [210, 280], [10, 330], [45, 15]];
+  const art = (i) => {
+    const [a, b] = HUES[i % HUES.length];
+    return `radial-gradient(circle at 25% 20%, hsl(${a} 85% 62%), transparent 55%),
+            radial-gradient(circle at 80% 75%, hsl(${b} 80% 50%), transparent 60%),
+            linear-gradient(160deg, hsl(${a} 50% 20%), hsl(${b} 55% 12%))`;
+  };
+
+  const CARDS = [
+    { name: 'VID-20260912-WA0121.mp4', album: 'WhatsApp Video', date: '12 set 2026', mb: 144, video: true, dur: '6:41' },
+    { name: 'VID-20240512-WA0031.mp4', album: 'WhatsApp Video', date: '12 mai 2024', mb: 138, video: true, dur: '5:58' },
+    { name: 'VID_20250301_181522.mp4', album: 'Camera', date: '1 mar 2025', mb: 121, video: true, dur: '2:14' },
+    { name: 'VID-20251003-WA0009.mp4', album: 'WhatsApp Video', date: '3 out 2025', mb: 97, video: true, dur: '4:02' },
+    { name: 'VID-20250714-WA0010.mp4', album: 'WhatsApp Video', date: '14 jul 2025', mb: 93, video: true, dur: '3:49' },
+    { name: 'Screenrecorder-2025-08-02.mp4', album: 'ScreenRecorder', date: '2 ago 2025', mb: 64, video: true, dur: '1:37' },
+    { name: 'VID-20241130-WA0044.mp4', album: 'WhatsApp Video', date: '30 nov 2024', mb: 52, video: true, dur: '2:20' },
+    { name: 'IMG_20250915_142233.jpg', album: 'Camera', date: '15 set 2025', mb: 9.8, video: false },
+    { name: 'IMG-20240824-WA0153.jpeg', album: 'WhatsApp Images', date: '24 ago 2024', mb: 4.1, video: false },
+    { name: 'Screenshot_2026-01-04.png', album: 'Screenshots', date: '4 jan 2026', mb: 2.3, video: false },
+  ].map((c, i) => ({ ...c, id: 'c' + i, art: art(i) }));
+
+  // Já marcados antes (pra revisão não começar vazia)
+  const PRE = [
+    { mb: 412, video: true }, { mb: 288, video: true }, { mb: 176, video: true },
+    { mb: 133, video: true }, { mb: 8.4, video: false }, { mb: 6.1, video: false },
+  ].map((c, i) => ({ ...c, id: 'p' + i, art: art(i + 3), name: 'anterior' }));
+
+  const fmt = (mb) => mb >= 1024 ? (mb / 1024).toFixed(1).replace('.', ',') + ' GB' : Math.round(mb) + ' MB';
+
+  // ---------- Estado ----------
+  let index = 0;
+  const marked = [...PRE];
+  const unmarked = new Set();
+  const history = [];
+
+  // ---------- Home ----------
+  const maxAlbum = Math.max(...ALBUMS.map(a => a.size));
+  document.getElementById('albums').innerHTML = ALBUMS.map(a => `
+    <div class="album">
+      <div class="ico" style="background:${a.color}22;color:${a.color}">${a.ico}</div>
+      <div><b>${a.name}</b><small>${a.count}</small>
+        <div class="mini"><i style="width:${Math.max(3, a.size / maxAlbum * 100)}%;background:${a.color}"></i></div>
+      </div>
+      <div class="size">${a.size >= 1 ? a.size.toFixed(1).replace('.', ',') + ' GB' : Math.round(a.size * 1024) + ' MB'}</div>
+    </div>`).join('');
+
+  // ---------- Swipe ----------
+  const deck = document.getElementById('deck');
+
+  function cardHTML(c, depth) {
+    const scale = 1 - depth * 0.05;
+    const y = depth * 14;
+    return `
+      <div class="card" data-depth="${depth}" style="z-index:${10 - depth};transform:translateY(${y}px) scale(${scale})">
+        <div class="art" style="background:${c.art}"></div>
+        <span class="kind">${c.video ? '▶ VÍDEO · ' + c.dur : '🖼 FOTO'}</span>
+        <span class="bigsize">${fmt(c.mb)}</span>
+        ${c.video ? '<div class="play">🔇</div>' : ''}
+        <div class="stamp del">APAGAR</div>
+        <div class="stamp keep">MANTER</div>
+        <div class="meta">
+          <b>${c.name}</b>
+          <small>${c.album} · ${c.date}</small>
+          ${c.video ? '<div class="timeline"><i></i></div>' : ''}
+        </div>
+      </div>`;
+  }
+
+  function renderDeck() {
+    const rest = CARDS.slice(index, index + 3);
+    if (!rest.length) {
+      deck.innerHTML = `<div class="deck-empty"><div><b>Acabou o álbum 🎉</b>Vai pra revisão confirmar o que marcou.<br><br><small>(↺ desfaz pra brincar de novo)</small></div></div>`;
+    } else {
+      deck.innerHTML = rest.map((c, d) => cardHTML(c, d)).reverse().join('');
+      attachDrag(deck.querySelector('.card[data-depth="0"]'));
+    }
+    document.getElementById('progress').textContent = `${Math.min(index + 1, CARDS.length)} de 11.402`;
+  }
+
+  function attachDrag(card) {
+    let startX = 0, startY = 0, dx = 0, dy = 0, dragging = false;
+    const stampDel = card.querySelector('.stamp.del');
+    const stampKeep = card.querySelector('.stamp.keep');
+
+    card.addEventListener('pointerdown', (e) => {
+      dragging = true; startX = e.clientX; startY = e.clientY;
+      card.setPointerCapture(e.pointerId);
+      card.classList.add('dragging');
+    });
+    card.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      dx = e.clientX - startX; dy = e.clientY - startY;
+      card.style.transform = `translate(${dx}px, ${dy * 0.3}px) rotate(${dx / 18}deg)`;
+      stampDel.style.opacity = Math.min(Math.max(-dx, 0) / 90, 1);
+      stampKeep.style.opacity = Math.min(Math.max(dx, 0) / 90, 1);
+    });
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      card.classList.remove('dragging');
+      if (Math.abs(dx) > 100) decide(dx < 0 ? 'del' : 'keep');
+      else {
+        card.style.transform = '';
+        stampDel.style.opacity = 0; stampKeep.style.opacity = 0;
+      }
+      dx = dy = 0;
+    };
+    card.addEventListener('pointerup', end);
+    card.addEventListener('pointercancel', end);
+  }
+
+  let busy = false;
+  function decide(dir) {
+    if (busy || index >= CARDS.length) return;
+    busy = true;
+    const card = deck.querySelector('.card[data-depth="0"]');
+    const c = CARDS[index];
+    card.querySelector('.stamp.' + dir).style.opacity = 1;
+    card.style.transform = `translate(${dir === 'del' ? -420 : 420}px, 30px) rotate(${dir === 'del' ? -24 : 24}deg)`;
+    setTimeout(() => {
+      if (dir === 'del') marked.push(c);
+      history.push({ dir, c });
+      index++;
+      busy = false;
+      renderDeck();
+      renderTotals();
+    }, 230);
+  }
+
+  function undo() {
+    if (busy || !history.length) return;
+    const last = history.pop();
+    if (last.dir === 'del') {
+      const i = marked.lastIndexOf(last.c);
+      if (i >= 0) marked.splice(i, 1);
+      unmarked.delete(last.c.id);
+    }
+    index--;
+    renderDeck();
+    renderTotals();
+  }
+
+  document.getElementById('btnDel').onclick = () => decide('del');
+  document.getElementById('btnKeep').onclick = () => decide('keep');
+  document.getElementById('btnUndo').onclick = undo;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') decide('del');
+    if (e.key === 'ArrowRight') decide('keep');
+    if (e.key.toLowerCase() === 'z') undo();
+  });
+
+  // ---------- Revisão / diálogo / pronto ----------
+  function thumbHTML(c, interactive) {
+    const off = unmarked.has(c.id);
+    return `
+      <div class="thumb ${off ? 'off' : ''}" ${interactive ? `data-id="${c.id}"` : ''}>
+        <div class="art" style="background:${c.art}"></div>
+        <span class="check">✓</span>
+        <span class="sz">${fmt(c.mb)}</span>
+        ${c.video ? '<span class="vid">▶</span>' : ''}
+      </div>`;
+  }
+
+  function renderTotals() {
+    const active = marked.filter(c => !unmarked.has(c.id));
+    const total = active.reduce((s, c) => s + c.mb, 0);
+    const n = active.length;
+    const items = n === 1 ? '1 item' : `${n} itens`;
+
+    document.getElementById('pill').textContent = `🗑 ${n} · ${fmt(total)}`;
+    document.getElementById('reviewSummary').innerHTML = `<b>${items} · ${fmt(total)}</b> pra liberar`;
+    const btn = document.getElementById('btnTrash');
+    btn.textContent = n ? `Mover ${items} pra lixeira` : 'Nada marcado';
+    btn.disabled = !n;
+
+    const ordered = [...marked].reverse();
+    document.getElementById('grid').innerHTML = ordered.map(c => thumbHTML(c, true)).join('');
+    document.getElementById('gridDim').innerHTML = ordered.map(c => thumbHTML(c, false)).join('');
+    document.getElementById('dialogCount').textContent = items;
+    document.getElementById('dialogThumbs').innerHTML =
+      active.slice(-4).map(c => `<span style="background:${c.art}"></span>`).join('');
+    document.getElementById('doneSize').innerHTML = `${fmt(total)}<small>liberados agora</small>`;
+    document.getElementById('doneCount').textContent = n;
+  }
+
+  document.getElementById('grid').addEventListener('click', (e) => {
+    const t = e.target.closest('.thumb');
+    if (!t) return;
+    const id = t.dataset.id;
+    unmarked.has(id) ? unmarked.delete(id) : unmarked.add(id);
+    renderTotals();
+  });
+
+  renderDeck();
+  renderTotals();
+</script>
+</body>
+</html>
