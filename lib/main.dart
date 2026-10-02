@@ -1,20 +1,30 @@
 import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const MainApp());
+import 'media/decision_store.dart';
+import 'media/media_library.dart';
+import 'screens/home_screen.dart';
+import 'theme.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final store = DecisionStore();
+  await store.load();
+  runApp(MediaSwipeApp(library: MediaLibrary(), store: store));
 }
 
-class MainApp extends StatelessWidget {
-  const MainApp({super.key});
+class MediaSwipeApp extends StatelessWidget {
+  const MediaSwipeApp({super.key, required this.library, required this.store});
+
+  final MediaLibrary library;
+  final DecisionStore store;
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('Hello World!'),
-        ),
-      ),
+    return MaterialApp(
+      title: 'media_swipe',
+      debugShowCheckedModeBanner: false,
+      theme: buildTheme(),
+      home: HomeScreen(library: library, store: store),
     );
   }
 }
