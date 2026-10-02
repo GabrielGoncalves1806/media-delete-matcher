@@ -1,104 +1,104 @@
-import 'dart:io';
+import 'dart:isolate';
 
-import 'package:photo_manager/photo_manager.dart';
-
+import 'media_file.dart';
 import 'media_filter.dart';
+import 'native_bridge.dart';
+import 'trash_bin.dart';
 
-/// Acesso à galeria do aparelho via MediaStore (Android) / PhotoKit (iOS).
+/// Um "álbum" é uma pasta. [folder] null = tudo.
+class Album {
+  Album({required this.name, required this.folder, required this.files})
+      : bytes = files.fold(0, (sum, f) => sum + f.size);
+
+  final String name;
+  final String? folder;
+
+  /// Do maior pro menor.
+  final List<MediaFile> files;
+  final int bytes;
+}
+
+/// Toda a mídia do armazenamento, lida direto do sistema de arquivos.
+///
+/// Não usa o MediaStore de propósito: ele esconde o que está em pastas com
+/// `.nomedia` (como a do WhatsApp quando a "visibilidade de mídia" está
+/// desligada), e lá costuma estar a maior parte do espaço.
 class MediaLibrary {
-  /// No Android filtra e ordena direto no MediaStore, pela coluna `_size`, do
-  /// maior pro menor. No iOS essas colunas não existem: os filtros são
-  /// ignorados e cai na ordem padrão (data).
-  static PMFilter _query(MediaFilter filter) => Platform.isAndroid
-      ? CustomFilter.sql(
-          where: filter.toSqlWhere(),
-          orderBy: [OrderByItem.desc(CustomColumns.android.size)],
-        )
-      : FilterOptionGroup();
+  MediaLibrary({NativeBridge? native, this.root = '/storage/emulated/0'})
+      : native = native ?? NativeBridge();
 
-  final _sizes = <String, int>{};
+  final String root;
+  final NativeBridge native;
 
-  Future<bool> requestAccess() async {
-    final state = await PhotoManager.requestPermissionExtend(
-      requestOption: const PermissionRequestOption(
-        androidPermission: AndroidPermission(
-          type: RequestType.common,
-          mediaLocation: false,
+  late final trash = TrashBin('$root/.media_swipe_trash', onFilesChanged: native.scanFiles);
+  late final thumbnails = Thumbnails(native);
+
+  var _files = <MediaFile>[];
+  var _byPath = <String, MediaFile>{};
+
+  /// Tudo, do maior pro menor.
+  List<MediaFile> get files => _files;
+
+  MediaFile? byPath(String path) => _byPath[path];
+  bool contains(String path) => _byPath.containsKey(path);
+
+  Future<void> scan() async {
+    final files = await _scanInIsolate(root, {trash.directory});
+    _set(files..sort((a, b) => b.size.compareTo(a.size)));
+  }
+
+  /// Estático pra closure do isolate não capturar o `this`.
+  static Future<List<MediaFile>> _scanInIsolate(String root, Set<String> skip) =>
+      Isolate.run(() => scanStorage(root, skip: skip));
+
+  /// Tira da lista arquivos que saíram (pra lixeira, por exemplo).
+  void forget(Iterable<String> paths) {
+    final gone = paths.toSet();
+    _set(_files.where((f) => !gone.contains(f.path)).toList());
+  }
+
+  void _set(List<MediaFile> files) {
+    _files = files;
+    _byPath = {for (final f in files) f.path: f};
+  }
+
+  Album all(MediaFilter filter) =>
+      Album(name: 'Tudo', folder: null, files: _files.where(filter.matches).toList());
+
+  /// Pastas com algo dentro do filtro, da mais pesada pra mais leve.
+  List<Album> albums(MediaFilter filter) {
+    final byFolder = <String, List<MediaFile>>{};
+    for (final file in _files.where(filter.matches)) {
+      byFolder.putIfAbsent(file.folder, () => []).add(file);
+    }
+
+    // Duas pastas com o mesmo nome ("Sent" do vídeo e "Sent" da imagem)
+    // ganham o nome da pasta de cima junto.
+    final nameCount = <String, int>{};
+    for (final folder in byFolder.keys) {
+      final name = _lastSegments(folder, 1);
+      nameCount[name] = (nameCount[name] ?? 0) + 1;
+    }
+
+    return [
+      for (final MapEntry(key: folder, value: files) in byFolder.entries)
+        Album(
+          name: nameCount[_lastSegments(folder, 1)]! > 1
+              ? _lastSegments(folder, 2)
+              : _lastSegments(folder, 1),
+          folder: folder,
+          files: files,
         ),
-      ),
-    );
-    return state.hasAccess;
+    ]..sort((a, b) => b.bytes.compareTo(a.bytes));
   }
 
-  Future<void> openSettings() => PhotoManager.openSetting();
+  /// O ano do arquivo mais antigo, pra montar a lista de anos do filtro.
+  int get oldestYear => _files.isEmpty
+      ? DateTime.now().year
+      : _files.map((f) => f.modified.year).reduce((a, b) => a < b ? a : b);
 
-  /// Álbuns que têm algo dentro do [filter]. O "Tudo" vem com isAll.
-  Future<List<AssetPathEntity>> albums({MediaFilter filter = MediaFilter.none}) =>
-      PhotoManager.getAssetPathList(
-        type: filter.requestType,
-        filterOption: _query(filter),
-      );
-
-  /// Ano do item mais antigo da galeria, pra montar a lista de anos.
-  Future<int> oldestYear() async {
-    final now = DateTime.now().year;
-    if (!Platform.isAndroid) return now;
-    final paths = await PhotoManager.getAssetPathList(
-      type: RequestType.common,
-      onlyAll: true,
-      filterOption: CustomFilter.sql(
-        where: MediaFilter.none.toSqlWhere(),
-        orderBy: [OrderByItem.asc(CustomColumns.android.createDate)],
-      ),
-    );
-    if (paths.isEmpty) return now;
-    final oldest = await paths.first.getAssetListRange(start: 0, end: 1);
-    return oldest.isEmpty ? now : oldest.first.createDateTime.year;
-  }
-
-  Future<List<AssetEntity>> page(AssetPathEntity album, int page, {int size = 60}) =>
-      album.getAssetListPaged(page: page, size: size);
-
-  /// Tamanho em bytes, com cache (é uma query no MediaStore por item).
-  Future<int> sizeOf(AssetEntity asset) async {
-    final cached = _sizes[asset.id];
-    if (cached != null) return cached;
-    final size = await asset.fileSize;
-    _sizes[asset.id] = size;
-    return size;
-  }
-
-  /// Soma o tamanho de todos os itens do álbum, em lotes.
-  /// [isCancelled] permite abandonar a conta quando a tela sai.
-  Future<int> totalSize(AssetPathEntity album, {bool Function()? isCancelled}) async {
-    const batch = 300;
-    final count = await album.assetCountAsync;
-    var total = 0;
-    for (var start = 0; start < count; start += batch) {
-      if (isCancelled?.call() ?? false) return total;
-      final assets = await album.getAssetListRange(start: start, end: start + batch);
-      final sizes = await Future.wait(assets.map(sizeOf));
-      total += sizes.fold(0, (a, b) => a + b);
-    }
-    return total;
-  }
-
-  /// Manda pra lixeira do sistema (Android 11+ mostra o diálogo nativo,
-  /// iOS manda pra "Apagados recentemente").
-  ///
-  /// [trashed] são os ids que saíram; vazio se o usuário cancelou.
-  /// [missing] são ids que nem existem mais (apagados por fora do app).
-  Future<({List<String> trashed, List<String> missing})> trash(List<String> ids) async {
-    final entities = <AssetEntity>[];
-    final missing = <String>[];
-    for (final id in ids) {
-      final entity = await AssetEntity.fromId(id);
-      entity == null ? missing.add(id) : entities.add(entity);
-    }
-    if (entities.isEmpty) return (trashed: <String>[], missing: missing);
-    final trashed = Platform.isIOS
-        ? await PhotoManager.editor.deleteWithIds(entities.map((e) => e.id).toList())
-        : await PhotoManager.editor.android.moveToTrash(entities);
-    return (trashed: trashed, missing: missing);
+  static String _lastSegments(String path, int n) {
+    final parts = path.split('/').where((p) => p.isNotEmpty).toList();
+    return parts.sublist(parts.length - n < 0 ? 0 : parts.length - n).join('/');
   }
 }

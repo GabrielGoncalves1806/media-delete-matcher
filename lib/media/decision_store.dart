@@ -3,16 +3,20 @@ import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Guarda as decisões do swipe e persiste entre aberturas do app.
+/// Guarda as decisões do swipe (por caminho do arquivo) e persiste entre
+/// aberturas do app.
 ///
 /// - [kept]: itens que o usuário quis manter (não aparecem de novo).
 /// - [marked]: itens marcados pra apagar, ainda não confirmados.
 /// - [unmarkedInReview]: desmarcados na revisão; dá pra marcar de novo
 ///   enquanto a revisão estiver aberta.
 class DecisionStore extends ChangeNotifier {
-  static const _keptKey = 'kept';
-  static const _markedKey = 'marked';
+  static const _keptKey = 'v2.kept';
+  static const _markedKey = 'v2.marked';
   static const _freedKey = 'freedBytes';
+
+  /// Da v1, que guardava ids do MediaStore em vez de caminhos.
+  static const _legacyKeys = ['kept', 'marked', 'hashCache'];
 
   late final SharedPreferences _prefs;
 
@@ -31,6 +35,9 @@ class DecisionStore extends ChangeNotifier {
 
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
+    for (final key in _legacyKeys) {
+      await _prefs.remove(key);
+    }
     _kept.addAll(_prefs.getStringList(_keptKey) ?? const []);
     for (final entry in _prefs.getStringList(_markedKey) ?? const <String>[]) {
       final sep = entry.lastIndexOf(':');
@@ -78,7 +85,7 @@ class DecisionStore extends ChangeNotifier {
   /// e notificar durante o desmonte da árvore dispara erro no Flutter.
   void closeReview() => _unmarkedInReview.clear();
 
-  /// Depois da confirmação do sistema: tira da lista e soma no total liberado.
+  /// Depois de ir pra lixeira: tira da lista e soma no total.
   void confirmTrashed(List<String> ids) {
     for (final id in ids) {
       final bytes = _marked.remove(id);

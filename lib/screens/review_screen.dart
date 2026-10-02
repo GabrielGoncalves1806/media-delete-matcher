@@ -1,12 +1,11 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
-import 'package:photo_manager/photo_manager.dart';
 
 import '../format.dart';
 import '../media/decision_store.dart';
+import '../media/media_file.dart';
 import '../media/media_library.dart';
 import '../theme.dart';
+import '../widgets/media_thumb.dart';
 import 'done_screen.dart';
 
 /// Grid do que foi marcado. Tocar alterna marcado/mantido.
@@ -23,7 +22,7 @@ class ReviewScreen extends StatefulWidget {
 
 class _ReviewScreenState extends State<ReviewScreen> {
   /// Ordem congelada ao abrir, pra miniatura não pular de lugar ao desmarcar.
-  late final List<String> _ids = widget.store.marked.keys.toList().reversed.toList();
+  late final List<String> _paths = widget.store.marked.keys.toList().reversed.toList();
   bool _busy = false;
 
   @override
@@ -32,33 +31,57 @@ class _ReviewScreenState extends State<ReviewScreen> {
     super.dispose();
   }
 
+  Future<bool> _confirm(int count, int bytes) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text('Mover ${plural(count, 'item', 'itens')} pra lixeira?'),
+        content: Text(
+          '${formatBytes(bytes)} saem da galeria e do WhatsApp. Ficam 30 dias '
+          'na lixeira do app, dá pra restaurar. O espaço volta quando ela for esvaziada.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.delete),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Mover'),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
+
   Future<void> _trash() async {
     final store = widget.store;
-    final ids = store.marked.keys.toList();
-    final sizes = Map.of(store.marked);
+    final library = widget.library;
+    if (!await _confirm(store.markedCount, store.markedBytes)) return;
     setState(() => _busy = true);
 
-    final result = await widget.library.trash(ids);
+    final files = <MediaFile>[];
+    for (final path in store.marked.keys.toList()) {
+      final file = library.byPath(path);
+      file == null ? store.forget(path) : files.add(file); // sumiu por fora do app
+    }
+    final moved = await library.trash.moveIn(files);
     if (!mounted) return;
     setState(() => _busy = false);
 
-    result.missing.forEach(store.forget);
-    if (result.trashed.isEmpty) {
+    if (moved.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Nada foi apagado.')),
+        const SnackBar(content: Text('Não consegui mover nada.')),
       );
       return;
     }
 
-    final freed = result.trashed.fold<int>(0, (sum, id) => sum + (sizes[id] ?? 0));
-    store.confirmTrashed(result.trashed);
+    final bytes = moved.fold<int>(0, (sum, p) => sum + (store.marked[p] ?? 0));
+    store.confirmTrashed(moved);
+    library.forget(moved);
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => DoneScreen(
-          freedBytes: freed,
-          count: result.trashed.length,
-          totalFreedBytes: store.freedBytes,
-        ),
+        builder: (_) => DoneScreen(movedBytes: bytes, count: moved.length, library: library),
       ),
     );
     if (mounted) Navigator.of(context).pop(true);
@@ -103,17 +126,16 @@ class _ReviewScreenState extends State<ReviewScreen> {
                     mainAxisSpacing: 4,
                     crossAxisSpacing: 4,
                   ),
-                  itemCount: _ids.length,
+                  itemCount: _paths.length,
                   itemBuilder: (context, i) {
-                    final id = _ids[i];
-                    final selected = store.marked.containsKey(id);
-                    final bytes = store.marked[id] ?? store.unmarkedInReview[id] ?? 0;
+                    final path = _paths[i];
                     return _Thumb(
-                      key: ValueKey(id),
-                      id: id,
-                      bytes: bytes,
-                      selected: selected,
-                      onTap: () => store.toggleInReview(id),
+                      key: ValueKey(path),
+                      file: widget.library.byPath(path),
+                      bytes: store.marked[path] ?? store.unmarkedInReview[path] ?? 0,
+                      selected: store.marked.containsKey(path),
+                      library: widget.library,
+                      onTap: () => store.toggleInReview(path),
                     );
                   },
                 ),
@@ -164,69 +186,47 @@ class _ReviewScreenState extends State<ReviewScreen> {
   }
 }
 
-class _Thumb extends StatefulWidget {
+class _Thumb extends StatelessWidget {
   const _Thumb({
     super.key,
-    required this.id,
+    required this.file,
     required this.bytes,
     required this.selected,
+    required this.library,
     required this.onTap,
   });
 
-  final String id;
+  /// Null se o arquivo sumiu por fora do app.
+  final MediaFile? file;
   final int bytes;
   final bool selected;
+  final MediaLibrary library;
   final VoidCallback onTap;
-
-  @override
-  State<_Thumb> createState() => _ThumbState();
-}
-
-class _ThumbState extends State<_Thumb> {
-  Uint8List? _data;
-  bool _isVideo = false;
-  bool _gone = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final asset = await AssetEntity.fromId(widget.id);
-    if (asset == null) {
-      if (mounted) setState(() => _gone = true);
-      return;
-    }
-    final data = await asset.thumbnailDataWithSize(const ThumbnailSize.square(300));
-    if (mounted) {
-      setState(() {
-        _data = data;
-        _isVideo = asset.type == AssetType.video;
-      });
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     const shadow = [Shadow(color: Colors.black87, blurRadius: 4)];
+    final file = this.file;
     return GestureDetector(
-      onTap: widget.onTap,
+      onTap: onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            const ColoredBox(color: AppColors.surface),
-            if (_data != null)
+            if (file == null)
+              const ColoredBox(
+                color: AppColors.surface,
+                child: Center(child: Icon(Icons.hide_image_outlined, color: AppColors.muted)),
+              )
+            else
               Opacity(
-                opacity: widget.selected ? 1 : 0.35,
-                child: Image.memory(_data!, fit: BoxFit.cover, gaplessPlayback: true),
-              ),
-            if (_gone)
-              const Center(
-                child: Icon(Icons.hide_image_outlined, color: AppColors.muted),
+                opacity: selected ? 1 : 0.35,
+                child: MediaThumb(
+                  path: file.path,
+                  isVideo: file.isVideo,
+                  thumbnails: library.thumbnails,
+                ),
               ),
             Positioned(
               top: 5,
@@ -235,11 +235,11 @@ class _ThumbState extends State<_Thumb> {
                 width: 22,
                 height: 22,
                 decoration: BoxDecoration(
-                  color: widget.selected ? AppColors.delete : Colors.black38,
+                  color: selected ? AppColors.delete : Colors.black38,
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 2),
                 ),
-                child: widget.selected
+                child: selected
                     ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
                     : null,
               ),
@@ -248,11 +248,11 @@ class _ThumbState extends State<_Thumb> {
               left: 6,
               bottom: 4,
               child: Text(
-                formatBytes(widget.bytes),
+                formatBytes(bytes),
                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, shadows: shadow),
               ),
             ),
-            if (_isVideo)
+            if (file?.isVideo ?? false)
               const Positioned(
                 right: 6,
                 bottom: 4,

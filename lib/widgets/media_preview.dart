@@ -1,47 +1,52 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:photo_manager/photo_manager.dart';
 import 'package:video_player/video_player.dart';
 
-import '../theme.dart';
+import '../media/media_file.dart';
+import '../media/native_bridge.dart';
+import 'media_thumb.dart';
 
-/// Mostra a foto ou o vídeo de um item.
+/// Mostra a foto ou o vídeo de um arquivo.
 ///
 /// Sempre começa pela miniatura (rápida). Quando [active] é true, carrega o
-/// arquivo original: foto em resolução de tela, vídeo tocando mudo em loop.
+/// original: foto em resolução de tela, vídeo tocando mudo em loop.
 /// Tocar liga/desliga o som do vídeo.
 class MediaPreview extends StatefulWidget {
-  const MediaPreview({super.key, required this.asset, required this.active});
+  const MediaPreview({
+    super.key,
+    required this.file,
+    required this.thumbnails,
+    required this.active,
+    this.onDuration,
+  });
 
-  final AssetEntity asset;
+  final MediaFile file;
+  final Thumbnails thumbnails;
   final bool active;
+
+  /// Avisa a duração quando o vídeo termina de carregar.
+  final ValueChanged<Duration>? onDuration;
 
   @override
   State<MediaPreview> createState() => _MediaPreviewState();
 }
 
 class _MediaPreviewState extends State<MediaPreview> {
-  Uint8List? _thumb;
-  File? _photo;
   VideoPlayerController? _video;
   bool _muted = true;
-  bool _loadingFull = false;
-
-  bool get _isVideo => widget.asset.type == AssetType.video;
+  bool _loading = false;
 
   @override
   void initState() {
     super.initState();
-    _loadThumb();
-    if (widget.active) _loadFull();
+    if (widget.active) _loadVideo();
   }
 
   @override
   void didUpdateWidget(MediaPreview old) {
     super.didUpdateWidget(old);
-    if (widget.active && !old.active) _loadFull();
+    if (widget.active && !old.active) _loadVideo();
   }
 
   @override
@@ -50,24 +55,10 @@ class _MediaPreviewState extends State<MediaPreview> {
     super.dispose();
   }
 
-  Future<void> _loadThumb() async {
-    final data = await widget.asset.thumbnailDataWithSize(const ThumbnailSize(540, 960));
-    if (mounted) setState(() => _thumb = data);
-  }
-
-  Future<void> _loadFull() async {
-    if (_loadingFull) return;
-    _loadingFull = true;
-    // No Android 11+ isso devolve o caminho original, sem copiar o arquivo.
-    final file = await widget.asset.file;
-    if (!mounted || file == null) return;
-
-    if (!_isVideo) {
-      setState(() => _photo = file);
-      return;
-    }
-
-    final controller = VideoPlayerController.file(file);
+  Future<void> _loadVideo() async {
+    if (!widget.file.isVideo || _loading) return;
+    _loading = true;
+    final controller = VideoPlayerController.file(File(widget.file.path));
     try {
       await controller.initialize();
     } catch (_) {
@@ -81,6 +72,7 @@ class _MediaPreviewState extends State<MediaPreview> {
     await controller.setLooping(true);
     await controller.setVolume(0);
     await controller.play();
+    widget.onDuration?.call(controller.value.duration);
     setState(() => _video = controller);
   }
 
@@ -93,18 +85,17 @@ class _MediaPreviewState extends State<MediaPreview> {
 
   @override
   Widget build(BuildContext context) {
+    final file = widget.file;
     final video = _video;
     return GestureDetector(
       onTap: _toggleSound,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          const ColoredBox(color: AppColors.surface),
-          if (_thumb != null)
-            Image.memory(_thumb!, fit: BoxFit.cover, gaplessPlayback: true),
-          if (_photo != null)
+          MediaThumb(path: file.path, isVideo: file.isVideo, thumbnails: widget.thumbnails),
+          if (widget.active && !file.isVideo)
             Image.file(
-              _photo!,
+              File(file.path),
               fit: BoxFit.cover,
               cacheWidth: 1440,
               gaplessPlayback: true,
@@ -120,7 +111,7 @@ class _MediaPreviewState extends State<MediaPreview> {
                 child: VideoPlayer(video),
               ),
             ),
-          if (_isVideo)
+          if (file.isVideo)
             Positioned(
               right: 14,
               top: 52,

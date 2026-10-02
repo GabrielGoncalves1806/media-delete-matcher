@@ -1,22 +1,44 @@
 import 'package:flutter/material.dart';
 
 import '../format.dart';
+import '../media/media_library.dart';
 import '../theme.dart';
 
-class DoneScreen extends StatelessWidget {
+class DoneScreen extends StatefulWidget {
   const DoneScreen({
     super.key,
-    required this.freedBytes,
+    required this.movedBytes,
     required this.count,
-    required this.totalFreedBytes,
+    required this.library,
   });
 
-  final int freedBytes;
+  final int movedBytes;
   final int count;
-  final int totalFreedBytes;
+  final MediaLibrary library;
+
+  @override
+  State<DoneScreen> createState() => _DoneScreenState();
+}
+
+class _DoneScreenState extends State<DoneScreen> {
+  int? _freed;
+  bool _emptying = false;
+
+  Future<void> _emptyTrash() async {
+    setState(() => _emptying = true);
+    final freed = await widget.library.trash.empty();
+    if (mounted) {
+      setState(() {
+        _emptying = false;
+        _freed = freed;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final trashBytes = widget.library.trash.bytes;
+    final freed = _freed;
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -29,27 +51,50 @@ class DoneScreen extends StatelessWidget {
                 height: 140,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.keep, width: 10),
+                  border: Border.all(color: freed == null ? AppColors.accent : AppColors.keep, width: 10),
                 ),
                 alignment: Alignment.center,
-                child: const Text('🎉', style: TextStyle(fontSize: 44)),
+                child: Text(freed == null ? '🗑' : '🎉', style: const TextStyle(fontSize: 44)),
               ),
               const SizedBox(height: 24),
               Text(
-                formatBytes(freedBytes),
+                formatBytes(freed ?? widget.movedBytes),
                 style: const TextStyle(fontSize: 44, fontWeight: FontWeight.w800, height: 1),
               ),
               const SizedBox(height: 8),
-              const Text('liberados agora', style: TextStyle(color: AppColors.muted)),
-              const SizedBox(height: 28),
-              Row(
-                children: [
-                  Expanded(child: _Stat(value: formatCount(count), label: 'na lixeira por 30 dias')),
-                  const SizedBox(width: 8),
-                  Expanded(child: _Stat(value: formatBytes(totalFreedBytes), label: 'liberados no total')),
-                ],
+              Text(
+                freed == null
+                    ? '${plural(widget.count, 'item foi', 'itens foram')} pra lixeira'
+                    : 'liberados de verdade',
+                style: const TextStyle(color: AppColors.muted),
               ),
               const SizedBox(height: 28),
+              if (freed == null && trashBytes > 0) ...[
+                Text(
+                  'A lixeira do app tem ${formatBytes(trashBytes)}. '
+                  'O espaço só volta quando ela for esvaziada.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.muted, fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.delete,
+                      side: const BorderSide(color: AppColors.delete),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: _emptying ? null : _emptyTrash,
+                    child: Text(
+                      _emptying ? 'Esvaziando…' : 'Esvaziar lixeira agora (${formatBytes(trashBytes)})',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
@@ -69,32 +114,6 @@ class DoneScreen extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat({required this.value, required this.label});
-
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 2),
-          Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-        ],
       ),
     );
   }

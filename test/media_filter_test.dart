@@ -1,23 +1,29 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_swipe/media/media_file.dart';
 import 'package:media_swipe/media/media_filter.dart';
 
+MediaFile file({bool video = false, int mb = 1, int year = 2024}) => MediaFile(
+      path: '/x/${video ? 'v.mp4' : 'f.jpg'}',
+      size: mb * 1024 * 1024,
+      modified: DateTime(year, 6),
+      isVideo: video,
+    );
+
 void main() {
-  test('sem filtro: só fotos e vídeos', () {
-    expect(MediaFilter.none.toSqlWhere(), 'media_type IN (1, 3)');
+  test('sem filtro aceita tudo', () {
     expect(MediaFilter.none.isEmpty, isTrue);
     expect(MediaFilter.none.label, '');
+    expect(MediaFilter.none.matches(file()), isTrue);
+    expect(MediaFilter.none.matches(file(video: true)), isTrue);
   });
 
   test('vídeos grandes de um ano', () {
     const filter = MediaFilter(kind: MediaKind.videos, bigOnly: true, year: 2024);
-    final from = DateTime(2024).millisecondsSinceEpoch ~/ 1000;
-    final to = DateTime(2025).millisecondsSinceEpoch ~/ 1000;
 
-    expect(
-      filter.toSqlWhere(),
-      'media_type IN (3) AND _size > ${50 * 1024 * 1024} '
-      'AND date_added >= $from AND date_added < $to',
-    );
+    expect(filter.matches(file(video: true, mb: 80, year: 2024)), isTrue);
+    expect(filter.matches(file(video: true, mb: 10, year: 2024)), isFalse); // pequeno
+    expect(filter.matches(file(video: true, mb: 80, year: 2023)), isFalse); // outro ano
+    expect(filter.matches(file(mb: 80, year: 2024)), isFalse); // foto
     expect(filter.label, 'vídeos · > 50 MB · 2024');
   });
 

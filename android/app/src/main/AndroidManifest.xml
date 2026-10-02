@@ -1,9 +1,10 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Leitura de fotos e vídeos (Android 13+). Abaixo disso o photo_manager já declara READ_EXTERNAL_STORAGE. -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <!-- Android 14+: acesso parcial quando o usuário escolhe "selecionar fotos". -->
-    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Lê o armazenamento direto (inclusive pastas com .nomedia, como a do
+         WhatsApp) e move arquivos pra lixeira do app. Android 11+. -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <application
         android:label="media_swipe"

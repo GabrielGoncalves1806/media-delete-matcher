@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:photo_manager/photo_manager.dart';
 
 import '../format.dart';
 import '../media/decision_store.dart';
+import '../media/media_file.dart';
 import '../media/media_library.dart';
 import '../theme.dart';
 import '../widgets/media_preview.dart';
@@ -12,13 +12,14 @@ import 'review_screen.dart';
 class SwipeScreen extends StatefulWidget {
   const SwipeScreen({
     super.key,
-    required this.album,
+    required this.files,
     required this.title,
     required this.library,
     required this.store,
   });
 
-  final AssetPathEntity album;
+  /// Na ordem em que vão aparecer (do maior pro menor).
+  final List<MediaFile> files;
   final String title;
   final MediaLibrary library;
   final DecisionStore store;
@@ -28,74 +29,32 @@ class SwipeScreen extends StatefulWidget {
 }
 
 class _SwipeScreenState extends State<SwipeScreen> {
-  final _queue = <AssetEntity>[];
-  final _history = <AssetEntity>[];
+  late final List<MediaFile> _queue =
+      widget.files.where((f) => !widget.store.isDecided(f.path)).toList();
+  final _history = <MediaFile>[];
   var _cardKey = GlobalKey<SwipeCardState>();
-  int _page = 0;
-  bool _exhausted = false;
-  bool _loading = false;
-  int _generation = 0;
 
-  AssetEntity? get _current => _queue.isEmpty ? null : _queue.first;
+  MediaFile? get _current => _queue.isEmpty ? null : _queue.first;
 
-  @override
-  void initState() {
-    super.initState();
-    _fill();
-  }
-
-  /// Mantém pelo menos alguns itens sem decisão na fila, buscando por página.
-  Future<void> _fill() async {
-    if (_loading || _exhausted) return;
-    _loading = true;
-    final generation = _generation;
-    while (_queue.length < 8 && !_exhausted) {
-      final assets = await widget.library.page(widget.album, _page++);
-      if (generation != _generation) return; // um _reload começou no meio
-      if (assets.isEmpty) _exhausted = true;
-      final seen = _queue.map((a) => a.id).toSet();
-      _queue.addAll(
-        assets.where((a) => !widget.store.isDecided(a.id) && !seen.contains(a.id)),
-      );
-    }
-    _loading = false;
-    if (mounted) setState(() {});
-  }
-
-  /// Depois de mandar coisas pra lixeira as páginas mudam; recomeça do zero.
-  Future<void> _reload() async {
-    _generation++;
-    _loading = false;
-    _queue.clear();
-    _history.clear();
-    _page = 0;
-    _exhausted = false;
-    _cardKey = GlobalKey();
-    setState(() {});
-    await _fill();
-  }
-
-  Future<void> _onSwiped(SwipeDirection direction) async {
-    final asset = _current;
-    if (asset == null) return;
-    final bytes = await widget.library.sizeOf(asset);
+  void _onSwiped(SwipeDirection direction) {
+    final file = _current;
+    if (file == null) return;
     if (direction == SwipeDirection.delete) {
-      widget.store.markForDeletion(asset.id, bytes);
+      widget.store.markForDeletion(file.path, file.size);
     } else {
-      widget.store.keep(asset.id);
+      widget.store.keep(file.path);
     }
     setState(() {
-      _history.add(asset);
+      _history.add(file);
       _queue.removeAt(0);
       _cardKey = GlobalKey();
     });
-    _fill();
   }
 
   void _undo() {
     if (_history.isEmpty) return;
     final last = _history.removeLast();
-    widget.store.forget(last.id);
+    widget.store.forget(last.path);
     setState(() {
       _queue.insert(0, last);
       _cardKey = GlobalKey();
@@ -103,18 +62,20 @@ class _SwipeScreenState extends State<SwipeScreen> {
   }
 
   Future<void> _openReview() async {
-    final trashedSomething = await Navigator.of(context).push<bool>(
+    await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => ReviewScreen(library: widget.library, store: widget.store),
       ),
     );
-    if (trashedSomething ?? false) {
-      await _reload();
-    } else {
-      // Desmarcados na revisão viram "mantidos": tira da fila se estiverem nela.
-      setState(() => _queue.removeWhere((a) => widget.store.isDecided(a.id)));
-      _fill();
-    }
+    if (!mounted) return;
+    // Sai da fila o que foi pra lixeira e o que virou "mantido" na revisão.
+    setState(() {
+      _queue.removeWhere(
+        (f) => widget.store.isDecided(f.path) || !widget.library.contains(f.path),
+      );
+      _history.removeWhere((f) => !widget.library.contains(f.path));
+      _cardKey = GlobalKey();
+    });
   }
 
   @override
@@ -128,6 +89,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
           children: [
             _TopBar(
               title: widget.title,
+              remaining: _queue.length,
               store: widget.store,
               onReview: _openReview,
             ),
@@ -135,7 +97,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: current == null
-                    ? _EmptyDeck(loading: _loading || !_exhausted, onReview: _openReview)
+                    ? _EmptyDeck(onReview: _openReview)
                     : Stack(
                         fit: StackFit.expand,
                         children: [
@@ -145,10 +107,9 @@ class _SwipeScreenState extends State<SwipeScreen> {
                               child: Transform.scale(
                                 scale: 0.95,
                                 child: _CardFace(
-                                  key: ValueKey('next-${next.id}'),
-                                  asset: next,
+                                  key: ValueKey('next-${next.path}'),
+                                  file: next,
                                   library: widget.library,
-                                  albumTitle: widget.title,
                                   active: false,
                                 ),
                               ),
@@ -157,10 +118,9 @@ class _SwipeScreenState extends State<SwipeScreen> {
                             key: _cardKey,
                             onSwiped: _onSwiped,
                             child: _CardFace(
-                              key: ValueKey('top-${current.id}'),
-                              asset: current,
+                              key: ValueKey('top-${current.path}'),
+                              file: current,
                               library: widget.library,
-                              albumTitle: widget.title,
                               active: true,
                             ),
                           ),
@@ -198,9 +158,15 @@ class _SwipeScreenState extends State<SwipeScreen> {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.title, required this.store, required this.onReview});
+  const _TopBar({
+    required this.title,
+    required this.remaining,
+    required this.store,
+    required this.onReview,
+  });
 
   final String title;
+  final int remaining;
   final DecisionStore store;
   final VoidCallback onReview;
 
@@ -215,10 +181,19 @@ class _TopBar extends StatelessWidget {
             icon: const Icon(Icons.chevron_left_rounded, size: 28),
           ),
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-              overflow: TextOverflow.ellipsis,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  plural(remaining, 'restante', 'restantes'),
+                  style: const TextStyle(color: AppColors.muted, fontSize: 12),
+                ),
+              ],
             ),
           ),
           ListenableBuilder(
@@ -249,24 +224,34 @@ class _TopBar extends StatelessWidget {
 }
 
 /// O conteúdo visual da carta: mídia + informações por cima.
-class _CardFace extends StatelessWidget {
+class _CardFace extends StatefulWidget {
   const _CardFace({
     super.key,
-    required this.asset,
+    required this.file,
     required this.library,
-    required this.albumTitle,
     required this.active,
   });
 
-  final AssetEntity asset;
+  final MediaFile file;
   final MediaLibrary library;
-  final String albumTitle;
   final bool active;
 
-  bool get _isVideo => asset.type == AssetType.video;
+  @override
+  State<_CardFace> createState() => _CardFaceState();
+}
+
+class _CardFaceState extends State<_CardFace> {
+  Duration? _duration;
 
   @override
   Widget build(BuildContext context) {
+    final file = widget.file;
+    final kind = !file.isVideo
+        ? 'FOTO'
+        : _duration == null
+            ? '▶ VÍDEO'
+            : '▶ VÍDEO · ${formatDuration(_duration!)}';
+
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
@@ -279,7 +264,12 @@ class _CardFace extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            MediaPreview(asset: asset, active: active),
+            MediaPreview(
+              file: file,
+              thumbnails: widget.library.thumbnails,
+              active: widget.active,
+              onDuration: (d) => setState(() => _duration = d),
+            ),
             const IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -292,25 +282,16 @@ class _CardFace extends StatelessWidget {
                 ),
               ),
             ),
-            Positioned(
-              top: 14,
-              left: 14,
-              child: _Badge(
-                _isVideo ? '▶ VÍDEO · ${formatDuration(asset.videoDuration)}' : 'FOTO',
-              ),
-            ),
+            Positioned(top: 14, left: 14, child: _Badge(kind)),
             Positioned(
               top: 10,
               right: 14,
-              child: FutureBuilder<int>(
-                future: library.sizeOf(asset),
-                builder: (context, snap) => Text(
-                  snap.hasData ? formatBytes(snap.data!) : '',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
-                  ),
+              child: Text(
+                formatBytes(file.size),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
                 ),
               ),
             ),
@@ -323,14 +304,14 @@ class _CardFace extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      asset.title ?? '',
+                      file.name,
                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${_folderName(asset) ?? albumTitle} · ${formatDate(asset.createDateTime)}',
+                      '${file.folderName} · ${formatDate(file.modified)}',
                       style: const TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ],
@@ -341,12 +322,6 @@ class _CardFace extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  /// "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/" -> "WhatsApp Video"
-  static String? _folderName(AssetEntity asset) {
-    final parts = (asset.relativePath ?? '').split('/').where((p) => p.isNotEmpty);
-    return parts.isEmpty ? null : parts.last;
   }
 }
 
@@ -427,14 +402,12 @@ class _RoundButton extends StatelessWidget {
 }
 
 class _EmptyDeck extends StatelessWidget {
-  const _EmptyDeck({required this.loading, required this.onReview});
+  const _EmptyDeck({required this.onReview});
 
-  final bool loading;
   final VoidCallback onReview;
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return const Center(child: CircularProgressIndicator());
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.line, width: 2),
@@ -445,7 +418,7 @@ class _EmptyDeck extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const Text(
-            'Acabou o álbum 🎉',
+            'Acabou por aqui 🎉',
             style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 6),

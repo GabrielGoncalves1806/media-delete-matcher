@@ -10,7 +10,6 @@ dependencies:
   crypto: ^3.0.7
   flutter:
     sdk: flutter
-  photo_manager: ^3.12.0
   shared_preferences: ^2.5.5
   video_player: ^2.11.1
 

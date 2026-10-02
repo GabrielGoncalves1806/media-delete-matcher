@@ -1,13 +1,12 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
-import 'package:photo_manager/photo_manager.dart';
 
 import '../format.dart';
 import '../media/decision_store.dart';
 import '../media/duplicate_finder.dart';
+import '../media/media_file.dart';
 import '../media/media_library.dart';
 import '../theme.dart';
+import '../widgets/media_thumb.dart';
 import 'review_screen.dart';
 
 /// Varre a galeria atrás de cópias idênticas e deixa marcar todas
@@ -23,9 +22,9 @@ class DuplicatesScreen extends StatefulWidget {
 }
 
 class _DuplicatesScreenState extends State<DuplicatesScreen> {
-  late final _finder = DuplicateFinder(widget.library);
+  final _finder = DuplicateFinder();
   List<DuplicateGroup>? _groups;
-  ScanStage _stage = ScanStage.sizes;
+  ScanStage _stage = ScanStage.partial;
   int _done = 0;
   int _total = 0;
   bool _cancelled = false;
@@ -45,6 +44,7 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
   Future<void> _scan() async {
     setState(() => _groups = null);
     final groups = await _finder.scan(
+      widget.library.files,
       isCancelled: () => _cancelled,
       onProgress: (stage, done, total) {
         if (!mounted) return;
@@ -64,9 +64,9 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
   Future<void> _markAllAndReview() async {
     for (final group in _groups!) {
       for (final copy in group.copies) {
-        widget.store.markForDeletion(copy.id, group.bytesEach);
+        widget.store.markForDeletion(copy.path, copy.size);
       }
-      widget.store.keep(group.keeperId);
+      widget.store.keep(group.keeperPath);
     }
     final trashed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -125,7 +125,8 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
                           final group = groups[i - 1];
                           return _GroupCard(
                             group: group,
-                            onPickKeeper: (id) => setState(() => group.keeperId = id),
+                            library: widget.library,
+                            onPickKeeper: (path) => setState(() => group.keeperPath = path),
                           );
                         },
                       ),
@@ -166,7 +167,6 @@ class _Progress extends StatelessWidget {
   final int total;
 
   String get _label => switch (stage) {
-        ScanStage.sizes => 'Lendo tamanhos',
         ScanStage.partial => 'Comparando começo e fim dos arquivos',
         ScanStage.full => 'Confirmando cópias (hash completo)',
       };
@@ -179,7 +179,7 @@ class _Progress extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            'Passo ${stage.index + 1} de 3',
+            'Passo ${stage.index + 1} de 2',
             style: const TextStyle(color: AppColors.muted, fontSize: 12, letterSpacing: 1),
           ),
           const SizedBox(height: 6),
@@ -210,9 +210,10 @@ class _Progress extends StatelessWidget {
 }
 
 class _GroupCard extends StatelessWidget {
-  const _GroupCard({required this.group, required this.onPickKeeper});
+  const _GroupCard({required this.group, required this.library, required this.onPickKeeper});
 
   final DuplicateGroup group;
+  final MediaLibrary library;
   final ValueChanged<String> onPickKeeper;
 
   @override
@@ -240,12 +241,13 @@ class _GroupCard extends StatelessWidget {
               itemCount: group.items.length,
               separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (context, i) {
-                final asset = group.items[i];
+                final file = group.items[i];
                 return _CopyTile(
-                  key: ValueKey(asset.id),
-                  asset: asset,
-                  isKeeper: asset.id == group.keeperId,
-                  onTap: () => onPickKeeper(asset.id),
+                  key: ValueKey(file.path),
+                  file: file,
+                  library: library,
+                  isKeeper: file.path == group.keeperPath,
+                  onTap: () => onPickKeeper(file.path),
                 );
               },
             ),
@@ -256,44 +258,31 @@ class _GroupCard extends StatelessWidget {
   }
 }
 
-class _CopyTile extends StatefulWidget {
+class _CopyTile extends StatelessWidget {
   const _CopyTile({
     super.key,
-    required this.asset,
+    required this.file,
+    required this.library,
     required this.isKeeper,
     required this.onTap,
   });
 
-  final AssetEntity asset;
+  final MediaFile file;
+  final MediaLibrary library;
   final bool isKeeper;
   final VoidCallback onTap;
 
-  @override
-  State<_CopyTile> createState() => _CopyTileState();
-}
-
-class _CopyTileState extends State<_CopyTile> {
-  Uint8List? _thumb;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.asset.thumbnailDataWithSize(const ThumbnailSize.square(240)).then((data) {
-      if (mounted) setState(() => _thumb = data);
-    });
-  }
-
-  /// "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/Sent/" -> "WhatsApp Video/Sent"
+  /// ".../WhatsApp Video/Sent/x.mp4" -> "WhatsApp Video/Sent"
   String get _folder {
-    final parts = (widget.asset.relativePath ?? '').split('/').where((p) => p.isNotEmpty).toList();
+    final parts = file.folder.split('/').where((p) => p.isNotEmpty).toList();
     return parts.length <= 2 ? parts.join('/') : parts.sublist(parts.length - 2).join('/');
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.isKeeper ? AppColors.keep : AppColors.delete;
+    final color = isKeeper ? AppColors.keep : AppColors.delete;
     return GestureDetector(
-      onTap: widget.onTap,
+      onTap: onTap,
       child: SizedBox(
         width: 96,
         child: Column(
@@ -311,12 +300,14 @@ class _CopyTileState extends State<_CopyTile> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    const ColoredBox(color: AppColors.surface2),
-                    if (_thumb != null)
-                      Opacity(
-                        opacity: widget.isKeeper ? 1 : 0.5,
-                        child: Image.memory(_thumb!, fit: BoxFit.cover, gaplessPlayback: true),
+                    Opacity(
+                      opacity: isKeeper ? 1 : 0.5,
+                      child: MediaThumb(
+                        path: file.path,
+                        isVideo: file.isVideo,
+                        thumbnails: library.thumbnails,
                       ),
+                    ),
                     Positioned(
                       left: 4,
                       top: 4,
@@ -324,7 +315,7 @@ class _CopyTileState extends State<_CopyTile> {
                         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(5)),
                         child: Text(
-                          widget.isKeeper ? 'FICA' : 'SAI',
+                          isKeeper ? 'FICA' : 'SAI',
                           style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
                         ),
                       ),

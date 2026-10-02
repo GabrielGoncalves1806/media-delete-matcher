@@ -5,15 +5,13 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_swipe/media/duplicate_finder.dart';
 import 'package:media_swipe/media/file_hash.dart';
-import 'package:photo_manager/photo_manager.dart';
+import 'package:media_swipe/media/media_file.dart';
 
-AssetEntity asset(String id, {String? path, int? created}) => AssetEntity(
-      id: id,
-      typeInt: 1,
-      width: 1,
-      height: 1,
-      relativePath: path,
-      createDateSecond: created,
+MediaFile media(String path, {int modified = 0, int size = 10}) => MediaFile(
+      path: path,
+      size: size,
+      modified: DateTime.fromMillisecondsSinceEpoch(modified),
+      isVideo: false,
     );
 
 void main() {
@@ -79,22 +77,22 @@ void main() {
   group('chooseKeeper', () {
     test('prefere a cópia da câmera', () {
       final keeper = chooseKeeper([
-        asset('wpp', path: 'Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/', created: 100),
-        asset('cam', path: 'DCIM/Camera/', created: 200),
+        media('/s/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/a.mp4', modified: 100),
+        media('/s/DCIM/Camera/a.mp4', modified: 200),
       ]);
-      expect(keeper.id, 'cam');
+      expect(keeper.path, '/s/DCIM/Camera/a.mp4');
     });
 
     test('sem câmera, fica a mais antiga', () {
       final keeper = chooseKeeper([
-        asset('novo', path: 'WhatsApp Video/', created: 300),
-        asset('velho', path: 'WhatsApp Video/Sent/', created: 100),
+        media('/s/WhatsApp Video/novo.mp4', modified: 300),
+        media('/s/WhatsApp Video/Sent/velho.mp4', modified: 100),
       ]);
-      expect(keeper.id, 'velho');
+      expect(keeper.path, '/s/WhatsApp Video/Sent/velho.mp4');
     });
 
     test('grupo calcula o desperdício', () {
-      final group = DuplicateGroup([asset('a'), asset('b'), asset('c')], 10);
+      final group = DuplicateGroup([media('/a'), media('/b'), media('/c')]);
       expect(group.wastedBytes, 20);
       expect(group.copies.length, 2);
     });
