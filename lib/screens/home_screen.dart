@@ -1,8 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 import '../format.dart';
 import '../media/decision_store.dart';
+import '../media/media_filter.dart';
 import '../media/media_library.dart';
 import '../theme.dart';
 import 'duplicates_screen.dart';
@@ -29,6 +32,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final _counts = <String, int>{};
   final _sizes = <String, int>{};
   int _generation = 0;
+  MediaFilter _filter = MediaFilter.none;
+  int _oldestYear = DateTime.now().year;
 
   @override
   void initState() {
@@ -49,12 +54,50 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _status = _Status.noAccess);
       return;
     }
+    widget.library.oldestYear().then((year) {
+      if (mounted) setState(() => _oldestYear = year);
+    });
     await _load();
+  }
+
+  void _setFilter(MediaFilter filter) {
+    if (filter == _filter) return;
+    setState(() => _filter = filter);
+    _load();
+  }
+
+  Future<void> _pickYear() async {
+    final years = [for (var y = DateTime.now().year; y >= _oldestYear; y--) y];
+    final picked = await showModalBottomSheet<int?>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              title: const Text('Todos os anos'),
+              trailing: _filter.year == null ? const Icon(Icons.check_rounded) : null,
+              onTap: () => Navigator.pop(context, -1),
+            ),
+            for (final y in years)
+              ListTile(
+                title: Text('$y'),
+                trailing: _filter.year == y ? const Icon(Icons.check_rounded) : null,
+                onTap: () => Navigator.pop(context, y),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null) return; // fechou sem escolher
+    _setFilter(_filter.copyWith(year: () => picked == -1 ? null : picked));
   }
 
   Future<void> _load() async {
     final generation = ++_generation;
-    final paths = await widget.library.albums();
+    final paths = await widget.library.albums(filter: _filter);
     final counts = await Future.wait(paths.map((p) => p.assetCountAsync));
     if (!mounted || generation != _generation) return;
 
@@ -156,7 +199,9 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 14),
           _SummaryCard(
             totalLabel: _allSized ? formatBytes(_totalBytes) : '${formatBytes(_totalBytes)}…',
-            countLabel: 'em ${plural(totalCount, 'foto ou vídeo', 'fotos e vídeos')}',
+            countLabel: _filter.isEmpty
+                ? 'em ${plural(totalCount, 'foto ou vídeo', 'fotos e vídeos')}'
+                : 'em ${plural(totalCount, 'item', 'itens')} · ${_filter.label}',
             freedBytes: widget.store.freedBytes,
           ),
           ListenableBuilder(
@@ -166,11 +211,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 : _PendingCard(store: widget.store, onTap: _openReview),
           ),
           const SizedBox(height: 14),
+          if (Platform.isAndroid) ...[
+            _FilterBar(filter: _filter, onChanged: _setFilter, onPickYear: _pickYear),
+            const SizedBox(height: 12),
+          ],
           if (all != null)
             _AllButton(
               subtitle: '${plural(totalCount, 'item', 'itens')}'
                   '${_allSized ? ' · ${formatBytes(_totalBytes)}' : ''}',
-              onTap: () => _openSwipe(all, 'Tudo'),
+              onTap: () => _openSwipe(all, _filter.isEmpty ? 'Tudo' : 'Tudo · ${_filter.label}'),
+            )
+          else
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text('Nada com esse filtro', style: TextStyle(color: AppColors.muted)),
+              ),
             ),
           const SizedBox(height: 10),
           _DuplicatesButton(onTap: _openDuplicates),
@@ -186,7 +242,10 @@ class _HomeScreenState extends State<HomeScreen> {
               count: _counts[album.id] ?? 0,
               bytes: _sizes[album.id],
               fraction: (_sizes[album.id] ?? 0) / maxSize,
-              onTap: () => _openSwipe(album, album.name),
+              onTap: () => _openSwipe(
+                album,
+                _filter.isEmpty ? album.name : '${album.name} · ${_filter.label}',
+              ),
             ),
         ],
       ),
@@ -308,6 +367,79 @@ class _AllButton extends StatelessWidget {
             ),
             const Icon(Icons.chevron_right_rounded, color: Colors.white),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterBar extends StatelessWidget {
+  const _FilterBar({required this.filter, required this.onChanged, required this.onPickYear});
+
+  final MediaFilter filter;
+  final ValueChanged<MediaFilter> onChanged;
+  final VoidCallback onPickYear;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget kind(String label, MediaKind kind) => _Chip(
+          label: label,
+          selected: filter.kind == kind,
+          onTap: () => onChanged(filter.copyWith(kind: kind)),
+        );
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          kind('Todos', MediaKind.all),
+          kind('Vídeos', MediaKind.videos),
+          kind('Fotos', MediaKind.photos),
+          _Chip(
+            label: '> 50 MB',
+            selected: filter.bigOnly,
+            onTap: () => onChanged(filter.copyWith(bigOnly: !filter.bigOnly)),
+          ),
+          _Chip(
+            label: filter.year == null ? 'Ano ▾' : '${filter.year} ▾',
+            selected: filter.year != null,
+            onTap: onPickYear,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.text : AppColors.surface,
+            borderRadius: BorderRadius.circular(99),
+            border: Border.all(color: selected ? AppColors.text : AppColors.line),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? AppColors.bg : AppColors.muted,
+            ),
+          ),
         ),
       ),
     );

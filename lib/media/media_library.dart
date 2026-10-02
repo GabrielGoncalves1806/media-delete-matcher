@@ -2,13 +2,16 @@ import 'dart:io';
 
 import 'package:photo_manager/photo_manager.dart';
 
+import 'media_filter.dart';
+
 /// Acesso à galeria do aparelho via MediaStore (Android) / PhotoKit (iOS).
 class MediaLibrary {
-  /// Ordena direto no MediaStore pela coluna `_size`, do maior pro menor.
-  /// No iOS essa coluna não existe, então cai na ordem padrão (data).
-  static final PMFilter _filter = Platform.isAndroid
+  /// No Android filtra e ordena direto no MediaStore, pela coluna `_size`, do
+  /// maior pro menor. No iOS essas colunas não existem: os filtros são
+  /// ignorados e cai na ordem padrão (data).
+  static PMFilter _query(MediaFilter filter) => Platform.isAndroid
       ? CustomFilter.sql(
-          where: '',
+          where: filter.toSqlWhere(),
           orderBy: [OrderByItem.desc(CustomColumns.android.size)],
         )
       : FilterOptionGroup();
@@ -29,11 +32,29 @@ class MediaLibrary {
 
   Future<void> openSettings() => PhotoManager.openSetting();
 
-  /// Álbuns com fotos e vídeos. O primeiro é o "Tudo" (isAll).
-  Future<List<AssetPathEntity>> albums() => PhotoManager.getAssetPathList(
-        type: RequestType.common,
-        filterOption: _filter,
+  /// Álbuns que têm algo dentro do [filter]. O "Tudo" vem com isAll.
+  Future<List<AssetPathEntity>> albums({MediaFilter filter = MediaFilter.none}) =>
+      PhotoManager.getAssetPathList(
+        type: filter.requestType,
+        filterOption: _query(filter),
       );
+
+  /// Ano do item mais antigo da galeria, pra montar a lista de anos.
+  Future<int> oldestYear() async {
+    final now = DateTime.now().year;
+    if (!Platform.isAndroid) return now;
+    final paths = await PhotoManager.getAssetPathList(
+      type: RequestType.common,
+      onlyAll: true,
+      filterOption: CustomFilter.sql(
+        where: MediaFilter.none.toSqlWhere(),
+        orderBy: [OrderByItem.asc(CustomColumns.android.createDate)],
+      ),
+    );
+    if (paths.isEmpty) return now;
+    final oldest = await paths.first.getAssetListRange(start: 0, end: 1);
+    return oldest.isEmpty ? now : oldest.first.createDateTime.year;
+  }
 
   Future<List<AssetEntity>> page(AssetPathEntity album, int page, {int size = 60}) =>
       album.getAssetListPaged(page: page, size: size);
