@@ -122,7 +122,7 @@ class _TrashScreenState extends State<TrashScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Lixeira', style: TextStyle(fontWeight: FontWeight.w700)),
+          title: const Text('Lixeira'),
         ),
         body: entries.isEmpty
             ? const Center(

@@ -4,7 +4,7 @@ import 'package:media_swipe/media/media_filter.dart';
 
 MediaFile file({bool video = false, int mb = 1, int year = 2024}) => MediaFile(
       path: '/x/${video ? 'v.mp4' : 'f.jpg'}',
-      size: mb * 1024 * 1024,
+      size: mb * 1000 * 1000,
       modified: DateTime(year, 6),
       isVideo: video,
     );

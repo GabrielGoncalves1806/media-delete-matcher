@@ -11,6 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
   shared_preferences: ^2.5.5
+  shimmer: ^3.0.0
   video_player: ^2.11.1
 
 dev_dependencies:
@@ -20,3 +21,25 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Fontes do design, embutidas (a build de release não tem permissão de internet).
+  # Licença OFL em assets/fonts/OFL-*.txt.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-400.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-500.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-600.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-700.ttf
+          weight: 700
+    - family: SpaceGrotesk
+      fonts:
+        - asset: assets/fonts/SpaceGrotesk-500.ttf
+          weight: 500
+        - asset: assets/fonts/SpaceGrotesk-600.ttf
+          weight: 600
+        - asset: assets/fonts/SpaceGrotesk-700.ttf
+          weight: 700

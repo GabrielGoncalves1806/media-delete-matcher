@@ -36,6 +36,9 @@ class MediaLibrary {
   var _files = <MediaFile>[];
   var _byPath = <String, MediaFile>{};
 
+  /// O que não é mídia no armazenamento compartilhado (ver [StorageScan]).
+  int otherBytes = 0;
+
   /// Tudo, do maior pro menor.
   List<MediaFile> get files => _files;
 
@@ -43,12 +46,13 @@ class MediaLibrary {
   bool contains(String path) => _byPath.containsKey(path);
 
   Future<void> scan() async {
-    final files = await _scanInIsolate(root, {trash.directory});
-    _set(files..sort((a, b) => b.size.compareTo(a.size)));
+    final result = await _scanInIsolate(root, {trash.directory});
+    otherBytes = result.otherBytes;
+    _set(result.media..sort((a, b) => b.size.compareTo(a.size)));
   }
 
   /// Estático pra closure do isolate não capturar o `this`.
-  static Future<List<MediaFile>> _scanInIsolate(String root, Set<String> skip) =>
+  static Future<StorageScan> _scanInIsolate(String root, Set<String> skip) =>
       Isolate.run(() => scanStorage(root, skip: skip));
 
   /// Tira da lista arquivos que saíram (pra lixeira, por exemplo).
@@ -62,13 +66,15 @@ class MediaLibrary {
     _byPath = {for (final f in files) f.path: f};
   }
 
-  Album all(MediaFilter filter) =>
-      Album(name: 'Tudo', folder: null, files: _files.where(filter.matches).toList());
+  /// Tudo que bate com o filtro e ainda não foi decidido ([isDecided]).
+  Album all(MediaFilter filter, {bool Function(String path)? isDecided}) =>
+      Album(name: 'Tudo', folder: null, files: _pending(filter, isDecided).toList());
 
-  /// Pastas com algo dentro do filtro, da mais pesada pra mais leve.
-  List<Album> albums(MediaFilter filter) {
+  /// Pastas com algo ainda pra revisar, da mais pesada pra mais leve.
+  /// Pasta onde tudo já foi decidido (apagado ou mantido) não aparece.
+  List<Album> albums(MediaFilter filter, {bool Function(String path)? isDecided}) {
     final byFolder = <String, List<MediaFile>>{};
-    for (final file in _files.where(filter.matches)) {
+    for (final file in _pending(filter, isDecided)) {
       byFolder.putIfAbsent(file.folder, () => []).add(file);
     }
 
@@ -91,6 +97,9 @@ class MediaLibrary {
         ),
     ]..sort((a, b) => b.bytes.compareTo(a.bytes));
   }
+
+  Iterable<MediaFile> _pending(MediaFilter filter, bool Function(String path)? isDecided) =>
+      _files.where((f) => filter.matches(f) && !(isDecided?.call(f.path) ?? false));
 
   /// O ano do arquivo mais antigo, pra montar a lista de anos do filtro.
   int get oldestYear => _files.isEmpty

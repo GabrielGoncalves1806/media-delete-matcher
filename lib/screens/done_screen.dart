@@ -59,7 +59,7 @@ class _DoneScreenState extends State<DoneScreen> {
               const SizedBox(height: 24),
               Text(
                 formatBytes(freed ?? widget.movedBytes),
-                style: const TextStyle(fontSize: 44, fontWeight: FontWeight.w800, height: 1),
+                style: display(48),
               ),
               const SizedBox(height: 8),
               Text(

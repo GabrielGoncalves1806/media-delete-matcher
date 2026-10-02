@@ -49,6 +49,20 @@ class _SwipeScreenState extends State<SwipeScreen> {
       _queue.removeAt(0);
       _cardKey = GlobalKey();
     });
+    _leaveIfDone();
+  }
+
+  /// Algum arquivo desta lista marcado e ainda não confirmado na revisão.
+  bool get _hasPendingMarks => widget.files.any((f) => widget.store.marked.containsKey(f.path));
+
+  /// Sem nada pra revisar e sem marcado esperando confirmação: volta pra home.
+  /// Se ainda tem marcado, fica na tela vazia que leva pra revisão.
+  void _leaveIfDone() {
+    if (_queue.isNotEmpty || _hasPendingMarks || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${widget.title}: tudo revisado ✓')),
+    );
+    Navigator.of(context).pop();
   }
 
   void _undo() {
@@ -76,6 +90,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
       _history.removeWhere((f) => !widget.library.contains(f.path));
       _cardKey = GlobalKey();
     });
+    _leaveIfDone();
   }
 
   @override
@@ -184,11 +199,7 @@ class _TopBar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                Text(title, style: display(17), overflow: TextOverflow.ellipsis),
                 Text(
                   plural(remaining, 'restante', 'restantes'),
                   style: const TextStyle(color: AppColors.muted, fontSize: 12),
@@ -288,10 +299,8 @@ class _CardFaceState extends State<_CardFace> {
               right: 14,
               child: Text(
                 formatBytes(file.size),
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  shadows: [Shadow(color: Colors.black54, blurRadius: 8)],
+                style: display(24).copyWith(
+                  shadows: const [Shadow(color: Colors.black54, blurRadius: 8)],
                 ),
               ),
             ),
@@ -417,10 +426,7 @@ class _EmptyDeck extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text(
-            'Acabou por aqui 🎉',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-          ),
+          Text('Acabou por aqui 🎉', style: display(22)),
           const SizedBox(height: 6),
           const Text(
             'Vai pra revisão confirmar o que marcou.',

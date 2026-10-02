@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_swipe/media/media_file.dart';
+import 'package:media_swipe/media/media_filter.dart';
+import 'package:media_swipe/media/media_library.dart';
 import 'package:media_swipe/media/trash_bin.dart';
 
 void main() {
@@ -21,7 +23,7 @@ void main() {
       put('Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/VID-1.mp4', size: 500);
       put('DCIM/Camera/IMG_1.JPG', size: 300);
 
-      final files = scanStorage(root.path);
+      final files = scanStorage(root.path).media;
       final names = files.map((f) => f.name).toSet();
 
       expect(names, {'VID-1.mp4', 'IMG_1.JPG'});
@@ -30,16 +32,18 @@ void main() {
     });
 
     test('pula ocultos, lixeira do Android, Android/data, vazios e não-mídia', () {
-      put('DCIM/.thumbnails/t.jpg');
-      put('DCIM/Camera/.trashed-1700000000-IMG_2.jpg');
-      put('Android/data/com.app/cache/x.jpg');
+      put('DCIM/.thumbnails/t.jpg', size: 3);
+      put('DCIM/Camera/.trashed-1700000000-IMG_2.jpg', size: 5);
+      put('Android/data/com.app/cache/x.jpg', size: 1000);
       put('Download/vazio.mp4', size: 0);
-      put('Download/doc.pdf');
-      put('Lixo/skip.jpg');
-      put('Download/ok.webp');
+      put('Download/doc.pdf', size: 7);
+      put('Lixo/skip.jpg', size: 1000);
+      put('Download/ok.webp', size: 11);
 
-      final files = scanStorage(root.path, skip: {'${root.path}/Lixo'});
-      expect(files.map((f) => f.name), ['ok.webp']);
+      final scan = scanStorage(root.path, skip: {'${root.path}/Lixo'});
+      expect(scan.media.map((f) => f.name), ['ok.webp']);
+      // ocultos e não-mídia contam como "outros"; Android/data e skip não
+      expect(scan.otherBytes, 3 + 5 + 7);
     });
   });
 
@@ -122,4 +126,26 @@ void main() {
       expect(trash.entries, isEmpty);
     });
   });
+
+  group('MediaLibrary.albums', () {
+    test('só pastas com algo pra revisar, maiores primeiro', () async {
+      put('DCIM/Camera/a.jpg', size: 100);
+      put('DCIM/Camera/b.jpg', size: 50);
+      put('WhatsApp Video/v.mp4', size: 400);
+      put('Screenshots/s.png', size: 10);
+
+      final library = MediaLibrary(root: root.path);
+      await library.scan();
+      expect(library.files.first.name, 'v.mp4'); // do maior pro menor
+
+      // tudo da pasta de screenshots já decidido, e um item da câmera também
+      final decided = {'${root.path}/Screenshots/s.png', '${root.path}/DCIM/Camera/a.jpg'};
+      final albums = library.albums(MediaFilter.none, isDecided: decided.contains);
+
+      expect(albums.map((a) => a.name), ['WhatsApp Video', 'Camera']);
+      expect(albums.last.bytes, 50); // só o que falta revisar
+      expect(library.all(MediaFilter.none, isDecided: decided.contains).files, hasLength(2));
+    });
+  });
 }
+

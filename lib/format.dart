@@ -3,13 +3,16 @@ const _months = [
   'jul', 'ago', 'set', 'out', 'nov', 'dez',
 ];
 
-/// 1536 MB -> "1,5 GB", 151000000 -> "144 MB".
+/// Unidades decimais (1 GB = 1000 MB), igual a tela de armazenamento do
+/// Android, pra os números baterem com o que o celular mostra.
+/// 1500000000 -> "1,5 GB", 151000000 -> "151 MB".
 String formatBytes(int bytes) {
-  const mb = 1024 * 1024;
-  const gb = mb * 1024;
+  const mb = 1000 * 1000;
+  const gb = mb * 1000;
+  if (bytes >= 100 * gb) return '${(bytes / gb).round()} GB';
   if (bytes >= gb) return '${(bytes / gb).toStringAsFixed(1).replaceAll('.', ',')} GB';
   if (bytes >= mb) return '${(bytes / mb).round()} MB';
-  return '${(bytes / 1024).round()} KB';
+  return '${(bytes / 1000).round()} KB';
 }
 
 /// "12 mai 2024"

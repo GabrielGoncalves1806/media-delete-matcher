@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+typedef StorageStats = ({int total, int free, int system});
+
 /// Ponte pro MainActivity.kt.
 class NativeBridge {
   static const _channel = MethodChannel('media_swipe/native');
@@ -10,9 +12,10 @@ class NativeBridge {
   /// Abre a tela do sistema. O resultado chega quando o app volta pro primeiro plano.
   Future<void> requestAllFilesAccess() => _channel.invokeMethod('requestAllFilesAccess');
 
-  Future<({int total, int free})> storageStats() async {
+  /// [total] é a capacidade de fábrica; [system] o que o Android reserva pra si.
+  Future<StorageStats> storageStats() async {
     final stats = await _channel.invokeMapMethod<String, int>('storageStats');
-    return (total: stats!['total']!, free: stats['free']!);
+    return (total: stats!['total']!, free: stats['free']!, system: stats['system']!);
   }
 
   /// JPEG pequeno, gerado pelo Android. Null se o arquivo não abrir.

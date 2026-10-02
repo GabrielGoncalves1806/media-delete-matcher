@@ -6,7 +6,7 @@ class MediaFilter {
   const MediaFilter({this.kind = MediaKind.all, this.bigOnly = false, this.year});
 
   static const none = MediaFilter();
-  static const bigThreshold = 50 * 1024 * 1024;
+  static const bigThreshold = 50 * 1000 * 1000; // decimal, igual o formatBytes
 
   final MediaKind kind;
   final bool bigOnly;

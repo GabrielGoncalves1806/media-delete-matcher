@@ -38,18 +38,32 @@ bool? isVideoFile(String name) {
   return null;
 }
 
+/// Resultado da varredura: a mídia e quanto o resto dos arquivos ocupa.
+class StorageScan {
+  const StorageScan(this.media, this.otherBytes);
+
+  final List<MediaFile> media;
+
+  /// Tudo que não é mídia visível: documentos, áudio, bancos do WhatsApp,
+  /// pastas escondidas (`.thumbnails`, `.Statuses`...). Pro painel de espaço.
+  final int otherBytes;
+}
+
 /// Varre [root] atrás de fotos e vídeos, ignorando `.nomedia` de propósito.
 ///
-/// Pula tudo que começa com ponto (`.thumbnails`, `.trashed-*` da lixeira do
-/// Android, `.Statuses`...), `Android/data` e `Android/obb` (o sistema bloqueia)
-/// e as pastas em [skip]. Síncrono: é pra rodar dentro de `Isolate.run`.
-List<MediaFile> scanStorage(String root, {Set<String> skip = const {}}) {
+/// Mídia dentro de algo que começa com ponto (`.thumbnails`, `.trashed-*` da
+/// lixeira do Android, `.Statuses`...) não entra na lista, mas o tamanho conta
+/// em [StorageScan.otherBytes]. `Android/data` e `Android/obb` o sistema
+/// bloqueia; as pastas em [skip] são puladas inteiras.
+/// Síncrono: é pra rodar dentro de `Isolate.run`.
+StorageScan scanStorage(String root, {Set<String> skip = const {}}) {
   final blocked = {'$root/Android/data', '$root/Android/obb', ...skip};
-  final result = <MediaFile>[];
-  final pending = [Directory(root)];
+  final media = <MediaFile>[];
+  var otherBytes = 0;
+  final pending = [(dir: Directory(root), hidden: false)];
 
   while (pending.isNotEmpty) {
-    final dir = pending.removeLast();
+    final (:dir, :hidden) = pending.removeLast();
     final List<FileSystemEntity> entries;
     try {
       entries = dir.listSync(followLinks: false);
@@ -58,27 +72,30 @@ List<MediaFile> scanStorage(String root, {Set<String> skip = const {}}) {
     }
     for (final entry in entries) {
       final name = entry.path.substring(entry.path.lastIndexOf('/') + 1);
-      if (name.startsWith('.')) continue;
+      final isHidden = hidden || name.startsWith('.');
       if (entry is Directory) {
-        if (!blocked.contains(entry.path)) pending.add(entry);
+        if (!blocked.contains(entry.path)) pending.add((dir: entry, hidden: isHidden));
         continue;
       }
       if (entry is! File) continue;
-      final video = isVideoFile(name);
-      if (video == null) continue;
+      final FileStat stat;
       try {
-        final stat = entry.statSync();
-        if (stat.size == 0) continue; // download quebrado
-        result.add(MediaFile(
-          path: entry.path,
-          size: stat.size,
-          modified: stat.modified,
-          isVideo: video,
-        ));
+        stat = entry.statSync();
       } on FileSystemException {
         continue;
       }
+      final video = isHidden ? null : isVideoFile(name);
+      if (video == null || stat.size == 0) {
+        otherBytes += stat.size;
+        continue;
+      }
+      media.add(MediaFile(
+        path: entry.path,
+        size: stat.size,
+        modified: stat.modified,
+        isVideo: video,
+      ));
     }
   }
-  return result;
+  return StorageScan(media, otherBytes);
 }

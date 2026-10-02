@@ -81,16 +81,13 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
     final groups = _groups;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Duplicados', style: TextStyle(fontWeight: FontWeight.w700)),
+        title: const Text('Duplicados'),
       ),
       body: groups == null
           ? _Progress(stage: _stage, done: _done, total: _total)
           : groups.isEmpty
               ? const Center(
-                  child: Text(
-                    'Nenhuma cópia idêntica 🎉',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                  ),
+                  child: Text('Nenhuma cópia idêntica 🎉', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                 )
               : Column(
                   children: [

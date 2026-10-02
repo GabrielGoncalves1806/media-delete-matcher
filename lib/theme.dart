@@ -12,12 +12,28 @@ abstract final class AppColors {
   static const keep = Color(0xFF2FD47A);
   static const accent = Color(0xFF7C6CFF);
   static const warn = Color(0xFFFFB020);
+  static const sky = Color(0xFF3FB6FF);
+  static const orange = Color(0xFFFF7A45);
+  static const pink = Color(0xFFE14BD7);
+  static const system = Color(0xFF55556A);
+  static const apps = Color(0xFF3A3A48);
 }
+
+/// Space Grotesk pra números e títulos; o resto é Inter (padrão do tema).
+TextStyle display(double size, {FontWeight weight = FontWeight.w700, Color? color}) => TextStyle(
+      fontFamily: 'SpaceGrotesk',
+      fontSize: size,
+      fontWeight: weight,
+      letterSpacing: -0.02 * size,
+      height: 1.1,
+      color: color,
+    );
 
 ThemeData buildTheme() {
   final base = ThemeData(
     brightness: Brightness.dark,
     useMaterial3: true,
+    fontFamily: 'Inter',
     colorScheme: ColorScheme.fromSeed(
       seedColor: AppColors.accent,
       brightness: Brightness.dark,
@@ -31,10 +47,18 @@ ThemeData buildTheme() {
       bodyColor: AppColors.text,
       displayColor: AppColors.text,
     ),
-    appBarTheme: const AppBarTheme(
+    appBarTheme: AppBarTheme(
       backgroundColor: AppColors.bg,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
+      titleTextStyle: display(20, color: AppColors.text),
     ),
+    snackBarTheme: const SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: AppColors.surface2,
+      contentTextStyle: TextStyle(color: AppColors.text, fontFamily: 'Inter'),
+    ),
+    dialogTheme: const DialogThemeData(backgroundColor: AppColors.surface),
+    bottomSheetTheme: const BottomSheetThemeData(backgroundColor: AppColors.surface),
   );
 }

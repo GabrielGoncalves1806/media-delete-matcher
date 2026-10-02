@@ -6,9 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   group('format', () {
     test('formatBytes', () {
-      expect(formatBytes(500 * 1024), '500 KB');
-      expect(formatBytes(144 * 1024 * 1024), '144 MB');
-      expect(formatBytes((1.5 * 1024 * 1024 * 1024).round()), '1,5 GB');
+      expect(formatBytes(500 * 1000), '500 KB');
+      expect(formatBytes(151 * 1000 * 1000), '151 MB');
+      expect(formatBytes(1500 * 1000 * 1000), '1,5 GB');
+      expect(formatBytes(128 * 1000 * 1000 * 1000), '128 GB');
     });
 
     test('formatCount e plural', () {

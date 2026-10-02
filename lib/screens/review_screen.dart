@@ -91,7 +91,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Revisar', style: TextStyle(fontWeight: FontWeight.w700)),
+        title: const Text('Revisar'),
       ),
       body: ListenableBuilder(
         listenable: widget.store,
