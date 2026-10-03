@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../format.dart';
+import '../media/compression.dart';
 import '../media/decision_store.dart';
 import '../media/media_file.dart';
 import '../media/media_library.dart';
@@ -53,13 +54,30 @@ class _SwipeScreenState extends State<SwipeScreen> {
 
   MediaFile? get _current => _queue.isEmpty ? null : _queue.first;
 
+  /// Plano de compressão da carta de cima (null = foto ou vídeo já leve).
+  CompressionPlan? _plan;
+  String? _planFor;
+
+  void _loadPlan(MediaFile? file) {
+    if (file?.path == _planFor) return;
+    _planFor = file?.path;
+    _plan = null;
+    if (file == null) return;
+    widget.library.compressionPlan(file).then((plan) {
+      if (mounted && _planFor == file.path) setState(() => _plan = plan);
+    });
+  }
+
   void _onSwiped(SwipeDirection direction) {
     final file = _current;
     if (file == null) return;
-    if (direction == SwipeDirection.delete) {
-      widget.store.markForDeletion(file.path, file.size);
-    } else {
-      widget.store.keep(file.path);
+    switch (direction) {
+      case SwipeDirection.delete:
+        widget.store.markForDeletion(file.path, file.size);
+      case SwipeDirection.keep:
+        widget.store.keep(file.path);
+      case SwipeDirection.compress:
+        widget.store.markForCompression(file.path, file.size);
     }
     setState(() {
       _history.add(file);
@@ -115,6 +133,8 @@ class _SwipeScreenState extends State<SwipeScreen> {
     final current = _current;
     final next = _queue.length > 1 ? _queue[1] : null;
     _faceKeys.removeWhere((path, _) => path != current?.path && path != next?.path);
+    _loadPlan(current);
+    final plan = _plan;
 
     return Scaffold(
       body: SafeArea(
@@ -150,11 +170,13 @@ class _SwipeScreenState extends State<SwipeScreen> {
                           SwipeCard(
                             key: _cardKey,
                             onSwiped: _onSwiped,
+                            canCompress: plan != null,
                             child: _CardFace(
                               key: _faceKey(current.path),
                               file: current,
                               library: widget.library,
                               active: true,
+                              plan: plan,
                               onLongPress: () => _openViewer(current),
                             ),
                           ),
@@ -170,16 +192,23 @@ class _SwipeScreenState extends State<SwipeScreen> {
                   ? null
                   : () => _cardKey.currentState?.swipe(SwipeDirection.keep),
               onUndo: _history.isEmpty ? null : _undo,
+              onCompress: current == null || plan == null
+                  ? null
+                  : () => _cardKey.currentState?.swipe(SwipeDirection.compress),
             ),
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
               child: Text.rich(
                 TextSpan(
-                  style: TextStyle(color: AppColors.muted, fontSize: 12),
+                  style: const TextStyle(color: AppColors.muted, fontSize: 12),
                   children: [
-                    TextSpan(text: '← apagar', style: TextStyle(color: AppColors.delete)),
-                    TextSpan(text: '  ·  segura = tela cheia  ·  '),
-                    TextSpan(text: 'manter →', style: TextStyle(color: AppColors.keep)),
+                    const TextSpan(text: '← apagar', style: TextStyle(color: AppColors.delete)),
+                    if (plan != null)
+                      const TextSpan(text: '  ·  ↑ comprimir', style: TextStyle(color: AppColors.accent))
+                    else
+                      const TextSpan(text: '  ·  segura = tela cheia'),
+                    const TextSpan(text: '  ·  '),
+                    const TextSpan(text: 'manter →', style: TextStyle(color: AppColors.keep)),
                   ],
                 ),
               ),
@@ -260,11 +289,15 @@ class _CardFace extends StatefulWidget {
     required this.file,
     required this.library,
     required this.active,
+    this.plan,
     this.onLongPress,
   });
 
   final MediaFile file;
   final MediaLibrary library;
+
+  /// Quando tem, mostra quanto o vídeo ficaria comprimido.
+  final CompressionPlan? plan;
 
   /// false = carta de baixo: carrega o vídeo/foto, mas não toca.
   final bool active;
@@ -319,6 +352,15 @@ class _CardFaceState extends State<_CardFace> {
               ),
             ),
             Positioned(top: 14, left: 14, child: _Badge(kind)),
+            if (widget.plan != null)
+              Positioned(
+                top: 44,
+                left: 14,
+                child: _Badge(
+                  '↑ COMPRIMIR · ~${formatBytes(widget.plan!.estimatedBytes)}',
+                  color: AppColors.accent,
+                ),
+              ),
             Positioned(
               top: 10,
               right: 14,
@@ -360,16 +402,17 @@ class _CardFaceState extends State<_CardFace> {
 }
 
 class _Badge extends StatelessWidget {
-  const _Badge(this.label);
+  const _Badge(this.label, {this.color = Colors.black54});
 
   final String label;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black54,
+        color: color == Colors.black54 ? color : color.withValues(alpha: 0.85),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
@@ -378,11 +421,17 @@ class _Badge extends StatelessWidget {
 }
 
 class _Actions extends StatelessWidget {
-  const _Actions({required this.onDelete, required this.onKeep, required this.onUndo});
+  const _Actions({
+    required this.onDelete,
+    required this.onKeep,
+    required this.onUndo,
+    required this.onCompress,
+  });
 
   final VoidCallback? onDelete;
   final VoidCallback? onKeep;
   final VoidCallback? onUndo;
+  final VoidCallback? onCompress;
 
   @override
   Widget build(BuildContext context) {
@@ -392,9 +441,11 @@ class _Actions extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           _RoundButton(icon: Icons.close_rounded, color: AppColors.delete, size: 64, onTap: onDelete),
-          const SizedBox(width: 20),
+          const SizedBox(width: 16),
           _RoundButton(icon: Icons.undo_rounded, color: AppColors.muted, size: 46, onTap: onUndo),
-          const SizedBox(width: 20),
+          const SizedBox(width: 14),
+          _RoundButton(icon: Icons.compress_rounded, color: AppColors.accent, size: 46, onTap: onCompress),
+          const SizedBox(width: 16),
           _RoundButton(icon: Icons.check_rounded, color: AppColors.keep, size: 64, onTap: onKeep),
         ],
       ),

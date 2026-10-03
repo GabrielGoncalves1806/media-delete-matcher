@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:isolate';
 
+import 'compression.dart';
 import 'json_file.dart';
 import 'media_file.dart';
 import 'media_filter.dart';
@@ -112,6 +113,26 @@ class MediaLibrary {
 
   static List<MediaFile> _sorted(Iterable<MediaFile> files) =>
       files.toList()..sort((a, b) => b.size.compareTo(a.size));
+
+  final _plans = <String, Future<CompressionPlan?>>{};
+
+  /// Se vale comprimir esse vídeo e como (null = já leve ou não é vídeo).
+  /// Lê os metadados uma vez por arquivo.
+  Future<CompressionPlan?> compressionPlan(MediaFile file) {
+    if (!file.isVideo) return Future.value();
+    return _plans.putIfAbsent(file.path, () async {
+      final info = await native.videoInfo(file.path);
+      return info == null ? null : planCompression(info, fileSize: file.size);
+    });
+  }
+
+  /// Troca um arquivo pela versão nova (depois de comprimir).
+  void replace(String oldPath, MediaFile newFile) {
+    _plans.remove(oldPath);
+    final gone = {oldPath, newFile.path};
+    if (_scanning) _forgottenDuringScan.add(oldPath);
+    _set(_sorted([..._files.where((f) => !gone.contains(f.path)), newFile]));
+  }
 
   /// Tira da lista arquivos que saíram (pra lixeira, por exemplo).
   void forget(Iterable<String> paths) {

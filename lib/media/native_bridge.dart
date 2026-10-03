@@ -1,10 +1,13 @@
 import 'package:flutter/services.dart';
 
+import 'compression.dart';
+
 typedef StorageStats = ({int total, int free, int system});
 
 /// Ponte pro MainActivity.kt.
 class NativeBridge {
   static const _channel = MethodChannel('media_swipe/native');
+  void Function(double progress)? _onCompressProgress;
 
   Future<bool> hasAllFilesAccess() async =>
       await _channel.invokeMethod<bool>('hasAllFilesAccess') ?? false;
@@ -25,6 +28,40 @@ class NativeBridge {
         'video': video,
         'size': size,
       });
+
+  /// Null se o arquivo não abrir como vídeo.
+  Future<VideoInfo?> videoInfo(String path) async {
+    final map = await _channel.invokeMapMethod<String, int>('videoInfo', {'path': path});
+    return map == null ? null : VideoInfo.fromMap(map);
+  }
+
+  /// Recodifica [input] em [output] (MP4, H.264). Uma por vez.
+  /// Lança PlatformException com code 'cancelled' se [cancelCompression] for chamado.
+  Future<void> compressVideo({
+    required String input,
+    required String output,
+    required CompressionPlan plan,
+    void Function(double progress)? onProgress,
+  }) async {
+    _onCompressProgress = onProgress;
+    // Registrado aqui (e não no construtor) pra não exigir o binding do
+    // Flutter só de criar a ponte, o que quebraria os testes.
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'compressProgress') _onCompressProgress?.call((call.arguments as int) / 100);
+    });
+    try {
+      await _channel.invokeMethod('compressVideo', {
+        'input': input,
+        'output': output,
+        'shortSide': plan.shortSide,
+        'bitrate': plan.bitrate,
+      });
+    } finally {
+      _onCompressProgress = null;
+    }
+  }
+
+  Future<void> cancelCompression() => _channel.invokeMethod('cancelCompress');
 
   /// Avisa o MediaStore que esses caminhos mudaram (sumiram ou voltaram),
   /// pra galeria não ficar mostrando fantasma.

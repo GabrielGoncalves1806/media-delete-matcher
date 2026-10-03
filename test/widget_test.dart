@@ -58,6 +58,22 @@ void main() {
       expect(store.isDecided('b'), isFalse);
     });
 
+    test('comprimir: marca, confirma e a versão leve vira mantida', () async {
+      store.markForCompression('/v.mkv', 100);
+      expect(store.isDecided('/v.mkv'), isTrue);
+      expect(store.compressBytes, 100);
+
+      store.confirmCompressed('/v.mkv', '/v.mp4');
+      expect(store.compressCount, 0);
+      expect(store.kept, {'/v.mp4'});
+
+      store.markForCompression('/w.mp4', 50);
+      await store.flush();
+      final reopened = DecisionStore(file);
+      await reopened.load();
+      expect(reopened.toCompress, {'/w.mp4': 50});
+    });
+
     test('forgetAll devolve vários pro swipe de uma vez', () {
       store.keep('a');
       store.keep('b');

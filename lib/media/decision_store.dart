@@ -11,6 +11,7 @@ import 'json_file.dart';
 ///
 /// - [kept]: itens que o usuário quis manter (não aparecem de novo).
 /// - [marked]: itens marcados pra apagar, ainda não confirmados.
+/// - [toCompress]: vídeos pra recodificar mais leves (swipe pra cima).
 /// - [unmarkedInReview]: desmarcados na revisão; dá pra marcar de novo
 ///   enquanto a revisão estiver aberta.
 ///
@@ -28,6 +29,7 @@ class DecisionStore extends ChangeNotifier {
 
   final _kept = <String>{};
   final _marked = <String, int>{}; // mantém a ordem de inserção
+  final _toCompress = <String, int>{};
   final _unmarkedInReview = <String, int>{};
   int _freedBytes = 0;
   Timer? _saveTimer;
@@ -38,14 +40,19 @@ class DecisionStore extends ChangeNotifier {
   int get markedCount => _marked.length;
   int get markedBytes => _marked.values.fold(0, (a, b) => a + b);
   int get freedBytes => _freedBytes;
+  Map<String, int> get toCompress => UnmodifiableMapView(_toCompress);
+  int get compressCount => _toCompress.length;
+  int get compressBytes => _toCompress.values.fold(0, (a, b) => a + b);
 
-  bool isDecided(String path) => _kept.contains(path) || _marked.containsKey(path);
+  bool isDecided(String path) =>
+      _kept.contains(path) || _marked.containsKey(path) || _toCompress.containsKey(path);
 
   Future<void> load() async {
     final data = await _file.read();
     if (data is Map<String, dynamic>) {
       _kept.addAll((data['kept'] as List? ?? const []).cast<String>());
       _marked.addAll((data['marked'] as Map? ?? const {}).cast<String, int>());
+      _toCompress.addAll((data['compress'] as Map? ?? const {}).cast<String, int>());
       _freedBytes = data['freed'] as int? ?? 0;
     } else {
       await _migrateFromPrefs();
@@ -70,27 +77,40 @@ class DecisionStore extends ChangeNotifier {
 
   void markForDeletion(String path, int bytes) {
     _kept.remove(path);
+    _toCompress.remove(path);
     _marked[path] = bytes;
+    _changed();
+  }
+
+  void markForCompression(String path, int bytes) {
+    _kept.remove(path);
+    _marked.remove(path);
+    _toCompress[path] = bytes;
     _changed();
   }
 
   void keep(String path) {
     _marked.remove(path);
+    _toCompress.remove(path);
     _kept.add(path);
     _changed();
   }
 
-  /// Volta o item pro estado "sem decisão" (desfazer do swipe, tela de mantidos).
-  void forget(String path) {
-    _kept.remove(path);
-    _marked.remove(path);
+  /// O original saiu (foi pra lixeira) e a versão leve ficou em [newPath].
+  void confirmCompressed(String oldPath, String newPath) {
+    _toCompress.remove(oldPath);
+    _kept.add(newPath);
     _changed();
   }
+
+  /// Volta o item pro estado "sem decisão" (desfazer do swipe, tela de mantidos).
+  void forget(String path) => forgetAll([path]);
 
   void forgetAll(Iterable<String> paths) {
     for (final path in paths) {
       _kept.remove(path);
       _marked.remove(path);
+      _toCompress.remove(path);
     }
     _changed();
   }
@@ -130,6 +150,7 @@ class DecisionStore extends ChangeNotifier {
     await _file.write({
       'kept': _kept.toList(),
       'marked': _marked,
+      'compress': _toCompress,
       'freed': _freedBytes,
     });
   }

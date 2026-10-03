@@ -7,6 +7,7 @@ import '../media/media_filter.dart';
 import '../media/media_library.dart';
 import '../media/native_bridge.dart';
 import '../theme.dart';
+import 'compress_screen.dart';
 import 'duplicates_screen.dart';
 import 'kept_screen.dart';
 import 'review_screen.dart';
@@ -209,6 +210,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               action: 'Revisar',
               color: AppColors.delete,
               onTap: () => _push(ReviewScreen(library: _library, store: widget.store)),
+            ),
+          if (widget.store.compressCount > 0)
+            _ActionCard(
+              icon: Icons.compress_rounded,
+              text: 'Comprimir · ${plural(widget.store.compressCount, 'vídeo', 'vídeos')} · '
+                  '${formatBytes(widget.store.compressBytes)}',
+              action: 'Abrir',
+              color: AppColors.accent,
+              onTap: () => _push(CompressScreen(library: _library, store: widget.store)),
             ),
           if (_keptCount > 0)
             _ActionCard(
