@@ -20,6 +20,7 @@ O celular encheu e a galeria não ajuda: mostra tudo misturado, do mais novo pro
 - **Duplicados exatos**: acha o mesmo arquivo salvo mais de uma vez, byte a byte, e deixa ficar com uma cópia de cada
 - **Painel de armazenamento**: quanto o celular tem e pra onde foi cada GB (WhatsApp, câmera, outras mídias, outros arquivos, apps e dados, sistema)
 - **Mantidos**: rever o que foi mantido e voltar atrás
+- **Cartão SD**: entra na varredura junto com o armazenamento interno, com painel próprio e selo "SD" nas pastas
 
 ## Como funciona por dentro
 
@@ -33,7 +34,7 @@ Algumas decisões que valem a leitura:
 
 **Compressão sem risco.** Com o [Media3 Transformer](https://developer.android.com/media/media3/transformer) (codec de hardware, sem ffmpeg): recodifica pra um temporário escondido; se não ficou pelo menos 15% menor, descarta; se ficou, o original vai pra lixeira do app e a versão leve assume o lugar com a mesma data ([`video_compressor.dart`](lib/media/video_compressor.dart)).
 
-**Lixeira própria.** A lixeira do Android só aceita o que o MediaStore considera mídia. A do app é uma pasta escondida no mesmo volume, então mover pra lá é um `rename`, instantâneo, sem copiar nada ([`trash_bin.dart`](lib/media/trash_bin.dart)).
+**Lixeira própria, uma por volume.** A lixeira do Android só aceita o que o MediaStore considera mídia. A do app é uma pasta escondida em cada volume (interno e cartão SD), então mover pra lá é um `rename`, instantâneo, sem copiar nada. Mandar algo do cartão pra lixeira do interno seria copiar o arquivo inteiro; com uma por volume isso nunca acontece, e na tela elas aparecem como uma só ([`trash_bin.dart`](lib/media/trash_bin.dart)).
 
 **Decisões em JSON com gravação agrupada.** Swipes seguidos viram uma gravação só, com escrita atômica (`.tmp` + rename), e grava na hora quando o app vai pro fundo ([`decision_store.dart`](lib/media/decision_store.dart)).
 
@@ -76,7 +77,6 @@ Na primeira abertura o app explica e pede o **acesso a todos os arquivos**. Nada
 - **Fora da Play Store**: o Google restringe a permissão de acesso a todos os arquivos pra apps comuns. Pra uso pessoal (APK direto) não muda nada.
 - **"Apps e dados" no painel é estimado**: é o que sobra depois de descontar sistema e arquivos visíveis. Separar app por app exigiria outra permissão.
 - **Compressão roda com o app aberto**, um vídeo por vez.
-- Arquivos no cartão SD não entram na varredura.
 
 ## Licença
 

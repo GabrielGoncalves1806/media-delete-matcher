@@ -5,7 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_swipe/media/media_file.dart';
 import 'package:media_swipe/media/media_filter.dart';
 import 'package:media_swipe/media/media_library.dart';
+import 'package:media_swipe/media/native_bridge.dart';
 import 'package:media_swipe/media/trash_bin.dart';
+
+/// Não fala com o Android: no computador não tem canal nativo.
+class _QuietNative extends NativeBridge {
+  @override
+  Future<void> scanFiles(List<String> paths) async {}
+}
 
 void main() {
   late Directory root;
@@ -228,6 +235,75 @@ void main() {
       reopened.forget(['${root.path}/DCIM/Camera/a.jpg']);
       await scanning;
       expect(reopened.files.map((f) => f.name), ['b.jpg']);
+    });
+  });
+
+  group('cartão SD', () {
+    // root = armazenamento interno; sd = o cartão, num diretório irmão
+    late Directory sd;
+
+    setUp(() => sd = Directory.systemTemp.createTempSync('media_swipe_sd'));
+    tearDown(() => sd.deleteSync(recursive: true));
+
+    File putSd(String relative, {int size = 10}) =>
+        File('${sd.path}/$relative')
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(List.filled(size, 7));
+
+    test('varre os dois volumes e separa por volume', () async {
+      put('DCIM/Camera/a.jpg', size: 100);
+      putSd('DCIM/Camera/b.mp4', size: 300);
+      putSd('Musica/x.mp3', size: 9);
+
+      final library = MediaLibrary(root: root.path, dataDir: '${root.path}/.app', extraRoots: [sd.path]);
+      await library.scan();
+
+      expect(library.files.map((f) => f.name), ['b.mp4', 'a.jpg']);
+      expect(library.filesIn(sd.path).single.name, 'b.mp4');
+      expect(library.isRemovable('${sd.path}/DCIM/Camera/b.mp4'), isTrue);
+      expect(library.isRemovable('${root.path}/DCIM/Camera/a.jpg'), isFalse);
+      expect(library.otherBytesIn(sd.path), 9);
+      expect(library.otherBytesIn(root.path), 0);
+    });
+
+    test('cada arquivo vai pra lixeira do próprio volume', () async {
+      put('DCIM/a.jpg', size: 100);
+      putSd('DCIM/b.jpg', size: 50);
+      final library = MediaLibrary(
+        root: root.path,
+        dataDir: '${root.path}/.app',
+        extraRoots: [sd.path],
+        native: _QuietNative(),
+      );
+      await library.scan();
+
+      final moved = await library.trash.moveIn(library.files);
+
+      expect(moved, hasLength(2));
+      expect(library.trash.bytesIn(root.path), 100);
+      expect(library.trash.bytesIn(sd.path), 50);
+      expect(Directory('${sd.path}/.media_swipe_trash').listSync().any((e) => e.path.endsWith('_b.jpg')), isTrue);
+
+      // restaurar devolve pro cartão
+      final sdEntry = library.trash.entries.firstWhere((e) => e.originalName == 'b.jpg');
+      expect(library.trash.pathOf(sdEntry), startsWith(sd.path));
+      expect(await library.trash.restore(sdEntry), isTrue);
+      expect(File('${sd.path}/DCIM/b.jpg').existsSync(), isTrue);
+
+      // a varredura não lista a mídia que tá dentro das lixeiras
+      await library.scan(full: true);
+      expect(library.files.map((f) => f.name), ['b.jpg']);
+    });
+
+    test('cartão tirado: o cache não traz as pastas dele de volta', () async {
+      put('DCIM/a.jpg', size: 100);
+      putSd('DCIM/b.jpg', size: 50);
+      final dataDir = '${root.path}/.app';
+      await MediaLibrary(root: root.path, dataDir: dataDir, extraRoots: [sd.path]).scan();
+
+      final withoutSd = MediaLibrary(root: root.path, dataDir: dataDir); // só o interno
+      expect(await withoutSd.loadCached(), isTrue);
+      expect(withoutSd.files.map((f) => f.name), ['a.jpg']);
     });
   });
 }

@@ -31,9 +31,19 @@ class MediaLibrary {
     required this.dataDir,
     NativeBridge? native,
     this.root = '/storage/emulated/0',
-  }) : native = native ?? NativeBridge();
+    List<String> extraRoots = const [],
+  })  : native = native ?? NativeBridge(),
+        _extraRoots = extraRoots;
 
+  /// Armazenamento interno.
   final String root;
+
+  /// Cartões SD montados.
+  List<String> _extraRoots;
+  List<String> get roots => [root, ..._extraRoots];
+
+  /// Volumes como o Android descreve (nome, espaço). Vazio até [setVolumes].
+  List<StorageVolume> volumes = const [];
 
   /// Pasta privada do app (caches e decisões).
   final String dataDir;
@@ -51,20 +61,45 @@ class MediaLibrary {
   final _forgottenDuringScan = <String>{};
   bool _scanning = false;
 
-  late final trash = TrashBin('$root/.media_swipe_trash', onFilesChanged: native.scanFiles);
+  late final MultiTrash trash = MultiTrash(onFilesChanged: native.scanFiles)..useVolumes(roots);
   late final thumbnails = Thumbnails(native);
 
   var _files = <MediaFile>[];
   var _byPath = <String, MediaFile>{};
-
-  /// O que não é mídia no armazenamento compartilhado (ver [StorageScan]).
-  int otherBytes = 0;
 
   /// Tudo, do maior pro menor.
   List<MediaFile> get files => _files;
 
   MediaFile? byPath(String path) => _byPath[path];
   bool contains(String path) => _byPath.containsKey(path);
+
+  /// Usa os volumes montados agora (interno + cartões). Chamar antes de
+  /// [loadCached]/[scan] pra cartão removido não aparecer com dado velho.
+  Future<void> setVolumes(List<StorageVolume> mounted) async {
+    volumes = mounted;
+    _extraRoots = [for (final v in mounted) if (!v.primary && v.path != root) v.path];
+    trash.useVolumes(roots);
+    await trash.load();
+  }
+
+  /// Raiz do volume onde o arquivo está.
+  String? volumeOf(String path) {
+    for (final r in roots) {
+      if (path.startsWith('$r/')) return r;
+    }
+    return null;
+  }
+
+  /// Está num cartão SD (e não no armazenamento interno).
+  bool isRemovable(String path) => volumeOf(path) != root && volumeOf(path) != null;
+
+  List<MediaFile> filesIn(String volume) =>
+      _files.where((f) => f.path.startsWith('$volume/')).toList();
+
+  /// O que não é mídia no volume (documentos, áudio, pastas escondidas...).
+  int otherBytesIn(String volume) => _snapshots.entries
+      .where((e) => e.key == volume || e.key.startsWith('$volume/'))
+      .fold(0, (sum, e) => sum + e.value.otherBytes);
 
   /// Mostra o resultado da última varredura sem tocar no armazenamento.
   /// False se não tem cache (primeira abertura).
@@ -74,12 +109,13 @@ class MediaLibrary {
     try {
       _snapshots = {
         for (final MapEntry(:key, :value) in (data['dirs'] as Map<String, dynamic>).entries)
-          key: DirSnapshot.fromJson(key, value as Map<String, dynamic>),
+          // Pasta de cartão que não tá montado agora fica de fora.
+          if (volumeOf(key) != null || roots.contains(key))
+            key: DirSnapshot.fromJson(key, value as Map<String, dynamic>),
       };
     } on Object {
       return false; // formato antigo ou corrompido: faz a varredura completa
     }
-    otherBytes = _snapshots.values.fold(0, (sum, s) => sum + s.otherBytes);
     _set(_sorted(_snapshots.values.expand((s) => s.media)));
     return true;
   }
@@ -90,11 +126,10 @@ class MediaLibrary {
   Future<int> scan({bool full = false}) async {
     _scanning = true;
     _forgottenDuringScan.clear();
-    final result = await _scanInIsolate(root, {trash.directory}, full ? const {} : _snapshots);
+    final result = await _scanInIsolate(roots, trash.directories, full ? const {} : _snapshots);
     _scanning = false;
 
     _snapshots = result.snapshots;
-    otherBytes = result.otherBytes;
     final gone = Set.of(_forgottenDuringScan);
     _set(_sorted(result.media.where((f) => !gone.contains(f.path))));
     await _scanCache.write({
@@ -103,13 +138,22 @@ class MediaLibrary {
     return result.listedDirs;
   }
 
+  /// Varre todos os volumes num isolate só.
   /// Estático pra closure do isolate não capturar o `this`.
   static Future<StorageScan> _scanInIsolate(
-    String root,
+    List<String> roots,
     Set<String> skip,
     Map<String, DirSnapshot> previous,
   ) =>
-      Isolate.run(() => scanStorage(root, skip: skip, previous: previous));
+      Isolate.run(() {
+        final scans = [for (final r in roots) scanStorage(r, skip: skip, previous: previous)];
+        return StorageScan(
+          media: [for (final s in scans) ...s.media],
+          otherBytes: scans.fold(0, (sum, s) => sum + s.otherBytes),
+          snapshots: {for (final s in scans) ...s.snapshots},
+          listedDirs: scans.fold(0, (sum, s) => sum + s.listedDirs),
+        );
+      });
 
   static List<MediaFile> _sorted(Iterable<MediaFile> files) =>
       files.toList()..sort((a, b) => b.size.compareTo(a.size));

@@ -65,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       setState(() => _status = _Status.welcome);
       return;
     }
-    await _library.trash.load();
+    await _library.setVolumes(await _library.native.storageVolumes());
     await _library.trash.purgeExpired();
     if (await _library.loadCached()) {
       // Abre na hora com a última varredura e atualiza só o que mudou.
@@ -91,7 +91,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Varredura completa, ignorando o cache (refresh manual e primeira vez).
   Future<void> _rescan() async {
     setState(() => _status = _Status.scanning);
-    await _library.trash.load();
+    // Relê os volumes: o cartão pode ter sido colocado ou tirado.
+    await _library.setVolumes(await _library.native.storageVolumes());
     await _library.scan(full: true);
     await _refreshStorage();
     if (mounted) {
@@ -104,7 +105,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _refreshStorage() async {
     final storage = await _library.native.storageStats();
-    if (mounted) setState(() => _storage = storage);
+    final volumes = await _library.native.storageVolumes();
+    if (!mounted) return;
+    setState(() {
+      _storage = storage;
+      // Só atualiza o espaço; trocar de volumes fica pro refresh completo.
+      _library.volumes = volumes;
+    });
   }
 
   /// Depois de voltar de outra tela: a lista em memória já foi atualizada,
@@ -202,6 +209,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _Header(onRefresh: _rescan, updating: _updating),
           const SizedBox(height: 16),
           if (_storage != null) _StorageCard(storage: _storage!, library: _library),
+          for (final volume in _library.volumes.where((v) => v.removable))
+            if (_library.roots.contains(volume.path)) _SdCard(volume: volume, library: _library),
           if (widget.store.markedCount > 0)
             _ActionCard(
               icon: Icons.delete_outline_rounded,
@@ -262,6 +271,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             for (final album in albums)
               _AlbumRow(
                 album: album,
+                onSdCard: _library.isRemovable(album.folder ?? ''),
                 fraction: album.bytes / maxAlbum,
                 onTap: () => _openSwipe(album),
               ),
@@ -346,8 +356,9 @@ class _StorageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Só o armazenamento interno: o cartão SD tem o card dele.
     var whatsapp = 0, camera = 0, otherMedia = 0;
-    for (final f in library.files) {
+    for (final f in library.filesIn(library.root)) {
       if (f.path.contains('/com.whatsapp/')) {
         whatsapp += f.size;
       } else if (f.path.contains('/DCIM/')) {
@@ -356,9 +367,10 @@ class _StorageCard extends StatelessWidget {
         otherMedia += f.size;
       }
     }
-    final trash = library.trash.bytes;
+    final trash = library.trash.bytesIn(library.root);
+    final otherFiles = library.otherBytesIn(library.root);
     final used = storage.total - storage.free;
-    final known = storage.system + whatsapp + camera + otherMedia + library.otherBytes + trash;
+    final known = storage.system + whatsapp + camera + otherMedia + otherFiles + trash;
     // O que sobra é o que fica em /data: apps, dados e caches (inclusive
     // downloads do Spotify, que ficam em Android/data).
     final apps = (used - known).clamp(0, used);
@@ -367,7 +379,7 @@ class _StorageCard extends StatelessWidget {
       (label: 'WhatsApp', bytes: whatsapp, color: AppColors.keep),
       (label: 'Câmera', bytes: camera, color: AppColors.warn),
       (label: 'Outras mídias', bytes: otherMedia, color: AppColors.accent),
-      (label: 'Outros arquivos', bytes: library.otherBytes, color: AppColors.sky),
+      (label: 'Outros arquivos', bytes: otherFiles, color: AppColors.sky),
       if (trash > 0) (label: 'Lixeira do app', bytes: trash, color: AppColors.delete),
       (label: 'Apps e dados', bytes: apps, color: AppColors.apps),
       (label: 'Sistema', bytes: storage.system, color: AppColors.system),
@@ -458,6 +470,83 @@ class _StorageCard extends StatelessWidget {
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Card compacto de um cartão SD: mídia, outros arquivos, lixeira e livre.
+class _SdCard extends StatelessWidget {
+  const _SdCard({required this.volume, required this.library});
+
+  final StorageVolume volume;
+  final MediaLibrary library;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = library.filesIn(volume.path).fold(0, (sum, f) => sum + f.size);
+    final other = library.otherBytesIn(volume.path);
+    final trash = library.trash.bytesIn(volume.path);
+    final used = volume.total - volume.free;
+    final rest = (used - media - other - trash).clamp(0, used);
+    final segments = [
+      (label: 'Mídias', bytes: media, color: AppColors.accent),
+      (label: 'Outros arquivos', bytes: other, color: AppColors.sky),
+      if (trash > 0) (label: 'Lixeira do app', bytes: trash, color: AppColors.delete),
+      if (rest > 0) (label: 'Sistema de arquivos', bytes: rest, color: AppColors.system),
+    ];
+
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.sd_card_rounded, color: AppColors.warn, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  volume.label,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(formatBytes(used), style: display(16)),
+              Text(
+                ' / ${formatBytes(volume.total)}',
+                style: const TextStyle(color: AppColors.muted, fontSize: 13),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _UsageBar(
+            total: volume.total,
+            segments: [for (final s in segments) (bytes: s.bytes, color: s.color)],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 14,
+            runSpacing: 6,
+            children: [
+              for (final s in segments)
+                SizedBox(
+                  width: 140,
+                  child: _LegendItem(label: s.label, bytes: s.bytes, color: s.color),
+                ),
+              Text(
+                '${formatBytes(volume.free)} livres',
+                style: const TextStyle(color: AppColors.keep, fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -797,9 +886,15 @@ class _DuplicatesButton extends StatelessWidget {
 }
 
 class _AlbumRow extends StatelessWidget {
-  const _AlbumRow({required this.album, required this.fraction, required this.onTap});
+  const _AlbumRow({
+    required this.album,
+    required this.onSdCard,
+    required this.fraction,
+    required this.onTap,
+  });
 
   final Album album;
+  final bool onSdCard;
   final double fraction;
   final VoidCallback onTap;
 
@@ -829,6 +924,20 @@ class _AlbumRow extends StatelessWidget {
                 children: [
                   Row(
                     children: [
+                      if (onSdCard) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppColors.warn.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: const Text(
+                            'SD',
+                            style: TextStyle(color: AppColors.warn, fontSize: 10, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       Expanded(
                         child: Text(
                           album.name,

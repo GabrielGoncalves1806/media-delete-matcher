@@ -4,6 +4,36 @@ import 'compression.dart';
 
 typedef StorageStats = ({int total, int free, int system});
 
+/// Um volume montado: o armazenamento interno ou um cartão SD.
+class StorageVolume {
+  const StorageVolume({
+    required this.path,
+    required this.label,
+    required this.removable,
+    required this.primary,
+    required this.total,
+    required this.free,
+  });
+
+  factory StorageVolume.fromMap(Map<Object?, Object?> map) => StorageVolume(
+        path: map['path']! as String,
+        label: map['label']! as String,
+        removable: map['removable']! as bool,
+        primary: map['primary']! as bool,
+        total: map['total']! as int,
+        free: map['free']! as int,
+      );
+
+  final String path;
+
+  /// Nome que o Android dá ("Armazenamento interno", "Cartão SD SanDisk"...).
+  final String label;
+  final bool removable;
+  final bool primary;
+  final int total;
+  final int free;
+}
+
 /// Ponte pro MainActivity.kt.
 class NativeBridge {
   static const _channel = MethodChannel('media_swipe/native');
@@ -19,6 +49,11 @@ class NativeBridge {
   Future<StorageStats> storageStats() async {
     final stats = await _channel.invokeMapMethod<String, int>('storageStats');
     return (total: stats!['total']!, free: stats['free']!, system: stats['system']!);
+  }
+
+  Future<List<StorageVolume>> storageVolumes() async {
+    final list = await _channel.invokeListMethod<Map<Object?, Object?>>('storageVolumes');
+    return [for (final map in list ?? const []) StorageVolume.fromMap(map)];
   }
 
   /// JPEG pequeno, gerado pelo Android. Null se o arquivo não abrir.

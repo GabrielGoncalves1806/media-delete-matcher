@@ -70,6 +70,8 @@ class MainActivity : FlutterActivity() {
 
                     "storageStats" -> result.success(storageStats())
 
+                    "storageVolumes" -> result.success(storageVolumes())
+
                     "thumbnail" -> {
                         val path = call.argument<String>("path")!!
                         val size = call.argument<Int>("size") ?: 400
@@ -149,6 +151,34 @@ class MainActivity : FlutterActivity() {
             "free" to free,
             "system" to (total - data.totalBytes).coerceAtLeast(0),
         )
+    }
+
+    /**
+     * Volumes montados (armazenamento interno e cartão SD), com caminho e
+     * espaço. O interno usa a capacidade de fábrica, igual ao [storageStats].
+     */
+    private fun storageVolumes(): List<Map<String, Any>> {
+        val manager = getSystemService(StorageManager::class.java)
+        return manager.storageVolumes
+            .filter { it.state == Environment.MEDIA_MOUNTED && it.directory != null }
+            .map { volume ->
+                val path = volume.directory!!.path
+                val stat = StatFs(path)
+                val (total, free) = if (volume.isPrimary) {
+                    val stats = storageStats()
+                    stats.getValue("total") to stats.getValue("free")
+                } else {
+                    stat.totalBytes to stat.availableBytes
+                }
+                mapOf(
+                    "path" to path,
+                    "label" to volume.getDescription(this),
+                    "removable" to volume.isRemovable,
+                    "primary" to volume.isPrimary,
+                    "total" to total,
+                    "free" to free,
+                )
+            }
     }
 
     /** Largura e altura já como aparecem na tela (rotação aplicada). */
