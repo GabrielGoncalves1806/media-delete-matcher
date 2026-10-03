@@ -190,15 +190,16 @@ class MediaLibrary {
     _byPath = {for (final f in files) f.path: f};
   }
 
-  /// Tudo que bate com o filtro e ainda não foi decidido ([isDecided]).
-  Album all(MediaFilter filter, {bool Function(String path)? isDecided}) =>
-      Album(name: 'Tudo', folder: null, files: _pending(filter, isDecided).toList());
+  /// Tudo que bate com o filtro e ainda não foi decidido ([isDecided]),
+  /// opcionalmente só de um [volume].
+  Album all(MediaFilter filter, {bool Function(String path)? isDecided, String? volume}) =>
+      Album(name: 'Tudo', folder: null, files: _pending(filter, isDecided, volume).toList());
 
   /// Pastas com algo ainda pra revisar, da mais pesada pra mais leve.
   /// Pasta onde tudo já foi decidido (apagado ou mantido) não aparece.
-  List<Album> albums(MediaFilter filter, {bool Function(String path)? isDecided}) {
+  List<Album> albums(MediaFilter filter, {bool Function(String path)? isDecided, String? volume}) {
     final byFolder = <String, List<MediaFile>>{};
-    for (final file in _pending(filter, isDecided)) {
+    for (final file in _pending(filter, isDecided, volume)) {
       byFolder.putIfAbsent(file.folder, () => []).add(file);
     }
 
@@ -222,8 +223,15 @@ class MediaLibrary {
     ]..sort((a, b) => b.bytes.compareTo(a.bytes));
   }
 
-  Iterable<MediaFile> _pending(MediaFilter filter, bool Function(String path)? isDecided) =>
-      _files.where((f) => filter.matches(f) && !(isDecided?.call(f.path) ?? false));
+  Iterable<MediaFile> _pending(
+    MediaFilter filter,
+    bool Function(String path)? isDecided,
+    String? volume,
+  ) =>
+      _files.where((f) =>
+          (volume == null || f.path.startsWith('$volume/')) &&
+          filter.matches(f) &&
+          !(isDecided?.call(f.path) ?? false));
 
   /// O ano do arquivo mais antigo, pra montar a lista de anos do filtro.
   int get oldestYear => _files.isEmpty

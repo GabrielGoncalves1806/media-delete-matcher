@@ -266,6 +266,22 @@ void main() {
       expect(library.otherBytesIn(root.path), 0);
     });
 
+    test('álbuns e "tudo" separados por volume', () async {
+      put('DCIM/Camera/a.jpg', size: 100);
+      putSd('DCIM/Camera/b.jpg', size: 300);
+      putSd('Fotos/c.jpg', size: 50);
+      final library = MediaLibrary(root: root.path, dataDir: '${root.path}/.app', extraRoots: [sd.path]);
+      await library.scan();
+
+      final internal = library.albums(MediaFilter.none, volume: root.path);
+      final card = library.albums(MediaFilter.none, volume: sd.path);
+
+      expect(internal.map((a) => a.folder), ['${root.path}/DCIM/Camera']);
+      expect(card.map((a) => a.folder), ['${sd.path}/DCIM/Camera', '${sd.path}/Fotos']);
+      expect(library.all(MediaFilter.none, volume: sd.path).bytes, 350);
+      expect(library.all(MediaFilter.none).files, hasLength(3)); // sem volume = tudo
+    });
+
     test('cada arquivo vai pra lixeira do próprio volume', () async {
       put('DCIM/a.jpg', size: 100);
       putSd('DCIM/b.jpg', size: 50);

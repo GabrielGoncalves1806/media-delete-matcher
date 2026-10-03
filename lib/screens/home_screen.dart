@@ -7,12 +7,14 @@ import '../media/media_filter.dart';
 import '../media/media_library.dart';
 import '../media/native_bridge.dart';
 import '../theme.dart';
+import '../widgets/album_widgets.dart';
 import 'compress_screen.dart';
 import 'duplicates_screen.dart';
 import 'kept_screen.dart';
 import 'review_screen.dart';
 import 'swipe_screen.dart';
 import 'trash_screen.dart';
+import 'volume_screen.dart';
 import 'welcome_screen.dart';
 
 enum _Status { checking, welcome, scanning, ready }
@@ -146,31 +148,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _pickYear() async {
-    final years = [for (var y = DateTime.now().year; y >= _library.oldestYear; y--) y];
-    final picked = await showModalBottomSheet<int>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            ListTile(
-              title: const Text('Todos os anos'),
-              trailing: _filter.year == null ? const Icon(Icons.check_rounded) : null,
-              onTap: () => Navigator.pop(context, -1),
-            ),
-            for (final y in years)
-              ListTile(
-                title: Text('$y'),
-                trailing: _filter.year == y ? const Icon(Icons.check_rounded) : null,
-                onTap: () => Navigator.pop(context, y),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (picked == null) return; // fechou sem escolher
-    setState(() => _filter = _filter.copyWith(year: () => picked == -1 ? null : picked));
+    final filter = await pickYear(context, _filter, _library.oldestYear);
+    if (filter != null) setState(() => _filter = filter);
   }
 
   @override
@@ -197,8 +176,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildReady() {
     final isDecided = widget.store.isDecided;
-    final all = _library.all(_filter, isDecided: isDecided);
-    final albums = _library.albums(_filter, isDecided: isDecided);
+    // A home é o armazenamento interno; o cartão SD tem a tela dele.
+    final all = _library.all(_filter, isDecided: isDecided, volume: _library.root);
+    final albums = _library.albums(_filter, isDecided: isDecided, volume: _library.root);
     final maxAlbum = albums.isEmpty ? 1 : albums.first.bytes;
 
     return RefreshIndicator(
@@ -210,7 +190,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           const SizedBox(height: 16),
           if (_storage != null) _StorageCard(storage: _storage!, library: _library),
           for (final volume in _library.volumes.where((v) => v.removable))
-            if (_library.roots.contains(volume.path)) _SdCard(volume: volume, library: _library),
+            if (_library.roots.contains(volume.path))
+              VolumeCard(
+                volume: volume,
+                library: _library,
+                pending: _library.all(MediaFilter.none, isDecided: isDecided, volume: volume.path).files.length,
+                onTap: () => _push(VolumeScreen(volume: volume, library: _library, store: widget.store)),
+              ),
           if (widget.store.markedCount > 0)
             _ActionCard(
               icon: Icons.delete_outline_rounded,
@@ -247,16 +233,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               onTap: _openTrash,
             ),
           const SizedBox(height: 22),
-          _FilterBar(
+          FilterBar(
             filter: _filter,
             onChanged: (f) => setState(() => _filter = f),
             onPickYear: _pickYear,
           ),
           const SizedBox(height: 12),
           if (all.files.isEmpty)
-            _AllDone(filtered: !_filter.isEmpty)
+            AllDone(filtered: !_filter.isEmpty)
           else
-            _AllButton(
+            AllButton(
               subtitle: '${plural(all.files.length, 'item', 'itens')} pra revisar · ${formatBytes(all.bytes)}',
               onTap: () => _openSwipe(all),
             ),
@@ -266,12 +252,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           if (albums.isNotEmpty) ...[
             const SizedBox(height: 26),
-            const _SectionTitle('Pastas pra revisar'),
+            const SectionTitle('Pastas do celular'),
             const SizedBox(height: 4),
             for (final album in albums)
-              _AlbumRow(
+              AlbumRow(
                 album: album,
-                onSdCard: _library.isRemovable(album.folder ?? ''),
                 fraction: album.bytes / maxAlbum,
                 onTap: () => _openSwipe(album),
               ),
@@ -321,25 +306,6 @@ class _Header extends StatelessWidget {
             tooltip: 'Ler tudo de novo',
           ),
       ],
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text.toUpperCase(),
-      style: const TextStyle(
-        color: AppColors.muted,
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 1.2,
-      ),
     );
   }
 }
@@ -431,7 +397,7 @@ class _StorageCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _UsageBar(
+          UsageBar(
             total: storage.total,
             segments: [for (final s in segments) (bytes: s.bytes, color: s.color)],
           ),
@@ -446,7 +412,7 @@ class _StorageCard extends StatelessWidget {
                   for (final s in segments)
                     SizedBox(
                       width: columnWidth,
-                      child: _LegendItem(label: s.label, bytes: s.bytes, color: s.color),
+                      child: LegendItem(label: s.label, bytes: s.bytes, color: s.color),
                     ),
                 ],
               );
@@ -475,149 +441,6 @@ class _StorageCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Card compacto de um cartão SD: mídia, outros arquivos, lixeira e livre.
-class _SdCard extends StatelessWidget {
-  const _SdCard({required this.volume, required this.library});
-
-  final StorageVolume volume;
-  final MediaLibrary library;
-
-  @override
-  Widget build(BuildContext context) {
-    final media = library.filesIn(volume.path).fold(0, (sum, f) => sum + f.size);
-    final other = library.otherBytesIn(volume.path);
-    final trash = library.trash.bytesIn(volume.path);
-    final used = volume.total - volume.free;
-    final rest = (used - media - other - trash).clamp(0, used);
-    final segments = [
-      (label: 'Mídias', bytes: media, color: AppColors.accent),
-      (label: 'Outros arquivos', bytes: other, color: AppColors.sky),
-      if (trash > 0) (label: 'Lixeira do app', bytes: trash, color: AppColors.delete),
-      if (rest > 0) (label: 'Sistema de arquivos', bytes: rest, color: AppColors.system),
-    ];
-
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.sd_card_rounded, color: AppColors.warn, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  volume.label,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Text(formatBytes(used), style: display(16)),
-              Text(
-                ' / ${formatBytes(volume.total)}',
-                style: const TextStyle(color: AppColors.muted, fontSize: 13),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _UsageBar(
-            total: volume.total,
-            segments: [for (final s in segments) (bytes: s.bytes, color: s.color)],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 14,
-            runSpacing: 6,
-            children: [
-              for (final s in segments)
-                SizedBox(
-                  width: 140,
-                  child: _LegendItem(label: s.label, bytes: s.bytes, color: s.color),
-                ),
-              Text(
-                '${formatBytes(volume.free)} livres',
-                style: const TextStyle(color: AppColors.keep, fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Barra segmentada de uso: cada categoria uma cor, o resto é espaço livre.
-class _UsageBar extends StatelessWidget {
-  const _UsageBar({required this.total, required this.segments});
-
-  final int total;
-  final List<({int bytes, Color color})> segments;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(99),
-      child: Container(
-        height: 14,
-        color: AppColors.surface2,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final width = constraints.maxWidth;
-            return Row(
-              children: [
-                for (final s in segments)
-                  if (s.bytes > 0)
-                    Container(
-                      // mínimo de 2px pra categoria pequena não sumir
-                      width: (s.bytes / total * width).clamp(2.0, width),
-                      color: s.color,
-                      margin: const EdgeInsets.only(right: 1.5),
-                    ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-}
-
-class _LegendItem extends StatelessWidget {
-  const _LegendItem({required this.label, required this.bytes, required this.color});
-
-  final String label;
-  final int bytes;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            label,
-            style: const TextStyle(color: AppColors.muted, fontSize: 12),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        Text(formatBytes(bytes), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-      ],
     );
   }
 }
@@ -659,159 +482,6 @@ class _ActionCard extends StatelessWidget {
                 Text(action, style: TextStyle(color: color, fontWeight: FontWeight.w600)),
                 Icon(Icons.chevron_right_rounded, color: color, size: 20),
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AllButton extends StatelessWidget {
-  const _AllButton({required this.subtitle, required this.onTap});
-
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      borderRadius: BorderRadius.circular(20),
-      clipBehavior: Clip.antiAlias,
-      child: Ink(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(colors: [AppColors.delete, AppColors.orange]),
-        ),
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(Icons.local_fire_department_rounded, color: Colors.white),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Tudo, maiores primeiro', style: display(17, color: Colors.white)),
-                      const SizedBox(height: 2),
-                      Text(subtitle, style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_rounded, color: Colors.white),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AllDone extends StatelessWidget {
-  const _AllDone({required this.filtered});
-
-  final bool filtered;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.keep.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.check_circle_rounded, color: AppColors.keep),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              filtered ? 'Nada pra revisar com esse filtro' : 'Tudo revisado 🎉',
-              style: const TextStyle(color: AppColors.keep, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FilterBar extends StatelessWidget {
-  const _FilterBar({required this.filter, required this.onChanged, required this.onPickYear});
-
-  final MediaFilter filter;
-  final ValueChanged<MediaFilter> onChanged;
-  final VoidCallback onPickYear;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget kind(String label, MediaKind kind) => _Chip(
-          label: label,
-          selected: filter.kind == kind,
-          onTap: () => onChanged(filter.copyWith(kind: kind)),
-        );
-
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          kind('Todos', MediaKind.all),
-          kind('Vídeos', MediaKind.videos),
-          kind('Fotos', MediaKind.photos),
-          _Chip(
-            label: '> 50 MB',
-            selected: filter.bigOnly,
-            onTap: () => onChanged(filter.copyWith(bigOnly: !filter.bigOnly)),
-          ),
-          _Chip(
-            label: filter.year == null ? 'Ano ▾' : '${filter.year} ▾',
-            selected: filter.year != null,
-            onTap: onPickYear,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 6),
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.text : AppColors.surface,
-            borderRadius: BorderRadius.circular(99),
-            border: Border.all(color: selected ? AppColors.text : AppColors.line),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? AppColors.bg : AppColors.muted,
             ),
           ),
         ),
@@ -863,111 +533,6 @@ class _DuplicatesButton extends StatelessWidget {
               const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Ícone e cor pela "cara" da pasta, como os tiles coloridos do design.
-({IconData icon, Color color}) _folderStyle(String? folder) {
-  final p = (folder ?? '').toLowerCase();
-  if (p.contains('whatsapp')) return (icon: Icons.chat_rounded, color: AppColors.keep);
-  if (p.contains('/dcim/camera')) return (icon: Icons.photo_camera_rounded, color: AppColors.warn);
-  if (p.contains('screenshot')) return (icon: Icons.screenshot_rounded, color: AppColors.accent);
-  if (p.contains('screenrecord')) return (icon: Icons.videocam_rounded, color: AppColors.orange);
-  if (p.contains('telegram')) return (icon: Icons.send_rounded, color: AppColors.sky);
-  if (p.contains('instagram') || p.contains('threads')) {
-    return (icon: Icons.camera_alt_outlined, color: AppColors.pink);
-  }
-  if (p.contains('download')) return (icon: Icons.download_rounded, color: AppColors.sky);
-  if (p.contains('movies')) return (icon: Icons.movie_rounded, color: AppColors.pink);
-  return (icon: Icons.folder_rounded, color: AppColors.muted);
-}
-
-class _AlbumRow extends StatelessWidget {
-  const _AlbumRow({
-    required this.album,
-    required this.onSdCard,
-    required this.fraction,
-    required this.onTap,
-  });
-
-  final Album album;
-  final bool onSdCard;
-  final double fraction;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = _folderStyle(album.folder);
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: style.color.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: Icon(style.icon, color: style.color, size: 20),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      if (onSdCard) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: AppColors.warn.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: const Text(
-                            'SD',
-                            style: TextStyle(color: AppColors.warn, fontSize: 10, fontWeight: FontWeight.w800),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                      Expanded(
-                        child: Text(
-                          album.name,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(formatBytes(album.bytes), style: display(15)),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    plural(album.files.length, 'item', 'itens'),
-                    style: const TextStyle(color: AppColors.muted, fontSize: 12),
-                  ),
-                  const SizedBox(height: 7),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(99),
-                    child: LinearProgressIndicator(
-                      value: fraction.clamp(0.02, 1.0),
-                      minHeight: 3,
-                      color: style.color,
-                      backgroundColor: AppColors.surface2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );
