@@ -6,6 +6,7 @@ import '../media/decision_store.dart';
 import '../media/media_file.dart';
 import '../media/media_library.dart';
 import '../theme.dart';
+import '../widgets/album_widgets.dart';
 import '../widgets/media_preview.dart';
 import '../widgets/swipe_card.dart';
 import 'move_flow.dart';
@@ -265,13 +266,11 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 16, 10),
+      padding: const EdgeInsets.fromLTRB(12, 12, 16, 12),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.chevron_left_rounded, size: 28),
-          ),
+          const HeaderBackButton(),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

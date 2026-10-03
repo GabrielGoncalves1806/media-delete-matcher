@@ -77,14 +77,12 @@ class _VolumeScreenState extends State<VolumeScreen> {
             final maxAlbum = albums.isEmpty ? 1 : albums.first.bytes;
 
             return ListView(
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 32),
+              padding: const EdgeInsets.fromLTRB(12, 14, 16, 32),
               children: [
                 Row(
                   children: [
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.chevron_left_rounded, size: 30),
-                    ),
+                    const HeaderBackButton(),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,7 +103,7 @@ class _VolumeScreenState extends State<VolumeScreen> {
                 ),
                 const SizedBox(height: 6),
                 Padding(
-                  padding: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.only(left: 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

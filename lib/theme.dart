@@ -48,6 +48,9 @@ ThemeData buildTheme() {
       displayColor: AppColors.text,
     ),
     appBarTheme: AppBarTheme(
+      // Um pouco mais alta que o padrão (56): o voltar fica mais longe da
+      // borda de cima, onde a MIUI disputa o toque com a cortina.
+      toolbarHeight: 64,
       backgroundColor: AppColors.bg,
       surfaceTintColor: Colors.transparent,
       elevation: 0,

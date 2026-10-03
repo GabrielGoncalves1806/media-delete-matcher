@@ -480,3 +480,23 @@ class AlbumRow extends StatelessWidget {
     );
   }
 }
+
+/// Voltar das telas sem AppBar (swipe, cartão). Maior que o padrão e com
+/// fundo, pra não exigir mira, e sem ficar colado na borda de cima, onde a
+/// MIUI disputa o toque com o gesto de puxar as notificações.
+class HeaderBackButton extends StatelessWidget {
+  const HeaderBackButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: 52,
+      child: IconButton.filledTonal(
+        style: IconButton.styleFrom(backgroundColor: AppColors.surface),
+        onPressed: () => Navigator.of(context).maybePop(),
+        icon: const Icon(Icons.arrow_back_rounded, size: 24),
+        tooltip: 'Voltar',
+      ),
+    );
+  }
+}
