@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../format.dart';
@@ -16,7 +17,7 @@ import 'search_screen.dart';
 import 'swipe_screen.dart';
 import 'trash_screen.dart';
 import 'volume_screen.dart';
-import 'welcome_screen.dart';
+import 'onboarding_screen.dart';
 
 enum _Status { checking, welcome, scanning, ready }
 
@@ -34,6 +35,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   _Status _status = _Status.checking;
   bool _askedForAccess = false;
+
+  /// Já passou pelo onboarding uma vez. Se a permissão for tirada depois,
+  /// aparece só o passo da permissão.
+  bool _onboarded = false;
+  static const _onboardedKey = 'onboarded';
   MediaFilter _filter = MediaFilter.none;
   StorageStats? _storage;
 
@@ -65,7 +71,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final ok = await _library.native.hasAllFilesAccess();
     if (!mounted) return;
     if (!ok) {
-      setState(() => _status = _Status.welcome);
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _onboarded = prefs.getBool(_onboardedKey) ?? false;
+        _status = _Status.welcome;
+      });
       return;
     }
     await _library.setVolumes(await _library.native.storageVolumes());
@@ -87,7 +98,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _requestAccess() {
-    setState(() => _askedForAccess = true);
+    setState(() {
+      _askedForAccess = true;
+      _onboarded = true;
+    });
+    SharedPreferences.getInstance().then((prefs) => prefs.setBool(_onboardedKey, true));
     _library.native.requestAllFilesAccess();
   }
 
@@ -158,7 +173,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return Scaffold(
       body: switch (_status) {
         _Status.checking => const SizedBox.shrink(),
-        _Status.welcome => WelcomeScreen(onGrant: _requestAccess, askedBefore: _askedForAccess),
+        _Status.welcome => OnboardingScreen(
+            native: _library.native,
+            onGrant: _requestAccess,
+            askedBefore: _askedForAccess,
+            permissionOnly: _onboarded,
+          ),
         _Status.scanning => const SafeArea(child: _HomeSkeleton()),
         _Status.ready => SafeArea(
             child: ListenableBuilder(

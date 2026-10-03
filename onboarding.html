@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Onboarding · media-delete-matcher</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0b0f; --surface: #15151c; --surface-2: #1e1e28; --line: #2a2a36;
+    --text: #f2f2f5; --muted: #8b8b99;
+    --del: #ff4d5e; --keep: #2fd47a; --accent: #7c6cff; --warn: #ffb020;
+    --sky: #3fb6ff; --orange: #ff7a45;
+    --font: 'Inter', system-ui, sans-serif; --display: 'Space Grotesk', 'Inter', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .page { max-width: 1480px; margin: 0 auto; padding: 48px 16px 80px; }
+
+  .hero { max-width: 760px; margin-bottom: 36px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: rgba(124,108,255,.12); padding: 4px 10px; border-radius: 99px; margin-bottom: 14px; }
+  .hero h1 { font-family: var(--display); font-size: clamp(32px, 6vw, 48px); line-height: 1.05; letter-spacing: -.02em; }
+  .hero p { color: var(--muted); margin-top: 14px; font-size: 17px; }
+
+  .stage { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 40px; align-items: start; }
+  @media (max-width: 860px) { .stage { grid-template-columns: 1fr; justify-items: center; } }
+
+  /* ---------- Celular ---------- */
+  .phone { width: 100%; max-width: 340px; height: 690px; background: #000; border-radius: 46px; padding: 10px; box-shadow: 0 0 0 1px var(--line), 0 30px 60px -20px rgba(0,0,0,.8); }
+  .screen { position: relative; height: 100%; border-radius: 36px; overflow: hidden; background: var(--bg); }
+  .statusbar { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; padding: 12px 24px; font-size: 12px; font-weight: 600; z-index: 5; }
+  .skip { position: absolute; top: 40px; right: 18px; z-index: 5; font-size: 13px; color: var(--muted); background: none; border: 0; font-family: var(--font); cursor: pointer; padding: 6px 10px; }
+  .skip:hover { color: var(--text); }
+
+  .track { display: flex; height: 100%; transition: transform .45s cubic-bezier(.2,.8,.2,1); }
+  .slide { flex: 0 0 100%; height: 100%; display: flex; flex-direction: column; padding: 76px 24px 0; }
+  .art > * { max-height: 100%; }
+  .art { flex: 1; display: grid; place-items: center; min-height: 0; }
+  .copy h2 { font-family: var(--display); font-size: 28px; line-height: 1.1; letter-spacing: -.02em; }
+  .copy p { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .copy p b { color: var(--text); font-weight: 600; }
+
+  .footer { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 24px 26px; display: flex; align-items: center; gap: 14px; background: linear-gradient(to top, var(--bg) 70%, transparent); z-index: 4; }
+  .dots { display: flex; gap: 6px; flex: 1; }
+  .dot { width: 7px; height: 7px; border-radius: 99px; background: var(--line); transition: all .3s; cursor: pointer; }
+  .dot.on { width: 22px; background: var(--text); }
+  .next { border: 0; border-radius: 16px; padding: 14px 22px; font-family: var(--font); font-weight: 700; font-size: 15px; cursor: pointer; background: var(--text); color: var(--bg); transition: transform .1s; }
+  .next:active { transform: scale(.96); }
+  .next.grant { flex: 1; background: var(--keep); color: #04210f; }
+
+  /* slide 1: storage */
+  .full { width: 100%; text-align: left; }
+  .big { font-family: var(--display); font-size: 54px; line-height: 1; letter-spacing: -.03em; }
+  .big small { font-size: 18px; color: var(--muted); font-weight: 500; letter-spacing: 0; }
+  .bar { height: 16px; border-radius: 99px; background: var(--surface-2); overflow: hidden; display: flex; gap: 2px; margin: 18px 0 12px; }
+  .bar i { display: block; height: 100%; transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+  .legend span::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 6px; background: var(--c); vertical-align: -1px; }
+  .alert { margin-top: 16px; display: inline-flex; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 12px; background: rgba(255,77,94,.12); color: var(--del); font-weight: 600; font-size: 13px; }
+
+  /* slide 2: swipe demo */
+  .deck { position: relative; width: 170px; height: 228px; margin: 0 auto; }
+  .card { position: absolute; inset: 0; border-radius: 24px; overflow: hidden; touch-action: none; user-select: none; cursor: grab; box-shadow: 0 18px 40px -16px rgba(0,0,0,.9); }
+  .card.back { transform: translateY(12px) scale(.94); cursor: default; }
+  .card .art-bg { position: absolute; inset: 0; }
+  .card .size { position: absolute; top: 12px; right: 14px; font-family: var(--display); font-weight: 700; font-size: 20px; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
+  .card .kind { position: absolute; top: 14px; left: 12px; font-size: 10px; font-weight: 700; padding: 3px 7px; border-radius: 7px; background: rgba(0,0,0,.5); }
+  .card .play { position: absolute; left: 50%; top: 46%; transform: translate(-50%,-50%); width: 42px; height: 42px; border-radius: 50%; background: rgba(0,0,0,.35); display: grid; place-items: center; }
+  .stamp { position: absolute; padding: 4px 10px; border-radius: 9px; border: 3px solid; font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: .04em; opacity: 0; pointer-events: none; }
+  .stamp.del { top: 46px; right: 12px; color: var(--del); transform: rotate(12deg); }
+  .stamp.keep { top: 46px; left: 12px; color: var(--keep); transform: rotate(-12deg); }
+  .stamp.up { bottom: 50px; left: 50%; transform: translateX(-50%); color: var(--accent); }
+  .gestures { display: flex; justify-content: space-between; gap: 14px; margin-top: 16px; font-size: 12px; font-weight: 600; }
+  .gestures span:nth-child(1) { color: var(--del); } .gestures span:nth-child(2) { color: var(--accent); } .gestures span:nth-child(3) { color: var(--keep); }
+  .finger { position: absolute; left: 50%; top: 55%; width: 38px; height: 38px; margin: -19px 0 0 -19px; border-radius: 50%; background: rgba(255,255,255,.85); box-shadow: 0 0 0 8px rgba(255,255,255,.18); pointer-events: none; z-index: 3; opacity: 0; transition: transform .55s cubic-bezier(.45,.05,.35,1), opacity .25s; }
+  .try { text-align: center; margin-top: 10px; font-size: 12px; color: var(--muted); transition: opacity .3s; }
+  .try b { color: var(--text); }
+  .toast { position: absolute; left: 50%; bottom: -46px; transform: translateX(-50%); white-space: nowrap; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 99px; background: var(--surface-2); opacity: 0; transition: opacity .2s; }
+
+  /* slide 3: safety flow */
+  .flow { width: 100%; display: grid; gap: 10px; }
+  .step { display: grid; grid-template-columns: 46px 1fr; gap: 12px; align-items: center; background: var(--surface); border-radius: 18px; padding: 12px; }
+  .step .ico { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 20px; }
+  .step b { display: block; font-size: 14px; }
+  .step small { color: var(--muted); font-size: 12px; }
+  .arrow { text-align: center; color: var(--line); font-size: 14px; line-height: .6; }
+
+  /* slide 4: tools */
+  .tools { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tool { background: var(--surface); border-radius: 18px; padding: 14px; }
+  .tool .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 18px; margin-bottom: 10px; }
+  .tool b { display: block; font-size: 14px; }
+  .tool small { color: var(--muted); font-size: 12px; line-height: 1.35; display: block; margin-top: 2px; }
+
+  /* slide 5: permission */
+  .perm-ico { width: 88px; height: 88px; border-radius: 28px; background: rgba(63,182,255,.14); display: grid; place-items: center; font-size: 40px; margin: 0 auto; }
+  .why { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .why b { color: var(--text); }
+  .privacy { display: flex; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--keep); font-weight: 600; }
+
+  /* ---------- Notas ao lado ---------- */
+  .notes { display: grid; gap: 14px; }
+  .note { background: var(--surface); border-radius: 18px; padding: 18px 20px; border: 1px solid transparent; transition: border-color .2s; cursor: pointer; }
+  .note.on { border-color: var(--accent); }
+  .note .n { font-family: var(--display); font-size: 12px; color: var(--accent); letter-spacing: .06em; text-transform: uppercase; }
+  .note h3 { font-family: var(--display); font-size: 18px; margin: 4px 0 6px; }
+  .note p { color: var(--muted); font-size: 14px; }
+  .rules { background: var(--surface); border-radius: 18px; padding: 18px 20px; margin-top: 8px; }
+  .rules h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 10px; }
+  .rules li { font-size: 14px; margin: 0 0 8px 18px; }
+  .rules li b { color: var(--text); }
+  .rules li { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="hero">
+    <span class="tag">Proposta · Onboarding</span>
+    <h1>Primeira abertura do app</h1>
+    <p>Cinco passos curtos antes de pedir a permissão. O celular é clicável: "Próximo", os pontinhos, o "Pular", e no passo 2 a carta arrasta de verdade (← → ↑).</p>
+  </header>
+
+  <div class="stage">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span>9:41</span><span>● ● ▮</span></div>
+      <button class="skip" id="skip">Pular</button>
+
+      <div class="track" id="track">
+        <!-- 1. O problema -->
+        <section class="slide">
+          <div class="art">
+            <div class="full">
+              <div class="big" id="used">0 GB <small>de 128 GB</small></div>
+              <div class="bar">
+                <i id="b1" style="width:0;background:var(--keep)"></i>
+                <i id="b2" style="width:0;background:var(--warn)"></i>
+                <i id="b3" style="width:0;background:var(--accent)"></i>
+                <i id="b4" style="width:0;background:#3a3a48"></i>
+              </div>
+              <div class="legend">
+                <span style="--c:var(--keep)">WhatsApp 32 GB</span>
+                <span style="--c:var(--warn)">Câmera 5 GB</span>
+                <span style="--c:var(--accent)">Outras mídias 4 GB</span>
+                <span style="--c:#3a3a48">Apps e sistema</span>
+              </div>
+              <div class="alert">⚠ só 847 MB livres</div>
+            </div>
+          </div>
+          <div class="copy">
+            <h2>Teu celular tá cheio.<br>Bora resolver.</h2>
+            <p>A maior parte do espaço é <b>foto e vídeo</b>, muito escondido em pastas que a galeria nem mostra.</p>
+          </div>
+          <div style="height:96px"></div>
+        </section>
+
+        <!-- 2. Swipe -->
+        <section class="slide">
+          <div class="art">
+            <div>
+              <div class="deck" id="deck"></div>
+              <div class="gestures"><span>← apaga</span><span>↑ comprime</span><span>mantém →</span></div>
+              <div class="try" id="try">👆 <b>Experimenta:</b> arrasta a carta</div>
+            </div>
+          </div>
+          <div class="copy">
+            <h2>Do maior pro menor,<br>no swipe.</h2>
+            <p><b>Swipe</b> é arrastar a carta com o dedo, como no Tinder: <b>esquerda</b> marca pra apagar, <b>direita</b> mantém e <b>pra cima</b> deixa um vídeo grande mais leve. As maiores vêm primeiro.</p>
+          </div>
+          <div style="height:96px"></div>
+        </section>
+
+        <!-- 3. Segurança -->
+        <section class="slide">
+          <div class="art">
+            <div class="flow">
+              <div class="step"><div class="ico" style="background:rgba(255,77,94,.14)">🗂</div><div><b>Revisão</b><small>Tudo que tu marcou, numa grade. Toca pra desmarcar.</small></div></div>
+              <div class="arrow">↓</div>
+              <div class="step"><div class="ico" style="background:rgba(124,108,255,.14)">♻</div><div><b>Lixeira por 30 dias</b><small>Mudou de ideia? Restaura pro lugar original.</small></div></div>
+              <div class="arrow">↓</div>
+              <div class="step"><div class="ico" style="background:rgba(47,212,122,.14)">✨</div><div><b>Esvaziar = espaço livre</b><small>Só aqui o espaço volta pro celular.</small></div></div>
+            </div>
+          </div>
+          <div class="copy">
+            <h2>Nada some sem<br>tu confirmar.</h2>
+            <p>O swipe só <b>marca</b>. Apagar mesmo é sempre um passo separado, com volta.</p>
+          </div>
+          <div style="height:96px"></div>
+        </section>
+
+        <!-- 4. Ferramentas -->
+        <section class="slide">
+          <div class="art">
+            <div class="tools">
+              <div class="tool"><div class="ico" style="background:rgba(124,108,255,.14)">⧉</div><b>Duplicados</b><small>O mesmo arquivo salvo duas vezes.</small></div>
+              <div class="tool"><div class="ico" style="background:rgba(255,176,32,.14)">💾</div><b>Pro cartão</b><small>Tira do celular sem apagar.</small></div>
+              <div class="tool"><div class="ico" style="background:rgba(63,182,255,.14)">🔍</div><b>Busca</b><small>Por nome, pasta ou ano, e age em lote.</small></div>
+              <div class="tool"><div class="ico" style="background:rgba(47,212,122,.14)">↗</div><b>Compartilhar</b><small>Achou aquela foto? Manda direto.</small></div>
+            </div>
+          </div>
+          <div class="copy">
+            <h2>E mais umas<br>ferramentas.</h2>
+            <p>Tudo na tela inicial, junto com o <b>painel do armazenamento</b>.</p>
+          </div>
+          <div style="height:96px"></div>
+        </section>
+
+        <!-- 5. Permissão -->
+        <section class="slide">
+          <div class="art">
+            <div style="width:100%">
+              <div class="perm-ico">📂</div>
+              <div class="why"><b>Por que acesso a todos os arquivos?</b> A galeria do Android esconde a mídia do WhatsApp e de outros apps, justo onde costuma estar a maior parte do espaço.</div>
+              <div class="privacy">🔒 Nada sai do teu celular. Sem internet, sem conta.</div>
+            </div>
+          </div>
+          <div class="copy">
+            <h2>Último passo.</h2>
+            <p>Na tela que abrir, <b>liga a chave do app</b> e volta pra cá.</p>
+          </div>
+          <div style="height:96px"></div>
+        </section>
+      </div>
+
+      <div class="footer">
+        <div class="dots" id="dots"></div>
+        <button class="next" id="next">Próximo</button>
+      </div>
+    </div></div>
+
+    <div>
+      <div class="notes" id="notes">
+        <div class="note" data-i="0"><div class="n">Passo 1 · O problema</div><h3>Teu celular tá cheio</h3><p>A barra enche animada até quase o fim, com o alerta de espaço em vermelho. Cria o "é comigo" antes de explicar qualquer coisa. No app, com os números reais do aparelho (dá pra ler o espaço sem permissão).</p></div>
+        <div class="note" data-i="1"><div class="n">Passo 2 · Como funciona</div><h3>Do maior pro menor, no swipe</h3><p>Explica o que é swipe pra quem não conhece. Um "dedo" demonstra os três gestos em loop até a pessoa encostar; aí a carta é dela. Aprender o ↑ aqui evita descobrir sem querer depois.</p></div>
+        <div class="note" data-i="2"><div class="n">Passo 3 · Segurança</div><h3>Nada some sem tu confirmar</h3><p>O medo de quem usa limpador é perder foto. Mostra o caminho inteiro: marcar → revisar → lixeira 30 dias → esvaziar. E deixa claro que o espaço só volta no último.</p></div>
+        <div class="note" data-i="3"><div class="n">Passo 4 · Ferramentas</div><h3>E mais umas ferramentas</h3><p>Só pra saber que existem. "Pro cartão" some se o celular não tiver cartão SD.</p></div>
+        <div class="note" data-i="4"><div class="n">Passo 5 · Permissão</div><h3>Último passo</h3><p>O pedido vem depois do valor, não antes. Explica o porquê (WhatsApp escondido) e a privacidade. Se voltar sem liberar, aparece um aviso pra tentar de novo.</p></div>
+      </div>
+      <div class="rules">
+        <h4>Regras</h4>
+        <ul>
+          <li><b>Só na primeira abertura.</b> Se a permissão for tirada depois, aparece só o passo 5.</li>
+          <li><b>"Pular"</b> vai direto pro passo 5 (a permissão não dá pra pular).</li>
+          <li>Voltar do Android volta um passo; arrastar pro lado também troca.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const track = document.getElementById('track');
+  const dotsEl = document.getElementById('dots');
+  const next = document.getElementById('next');
+  const skip = document.getElementById('skip');
+  const notes = [...document.querySelectorAll('.note')];
+  const TOTAL = 5;
+  let step = 0;
+
+  for (let i = 0; i < TOTAL; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    d.onclick = () => go(i);
+    dotsEl.appendChild(d);
+  }
+  notes.forEach(n => n.onclick = () => go(+n.dataset.i));
+
+  function go(i) {
+    step = Math.max(0, Math.min(TOTAL - 1, i));
+    track.style.transform = `translateX(-${step * 100}%)`;
+    [...dotsEl.children].forEach((d, k) => d.classList.toggle('on', k === step));
+    notes.forEach((n, k) => n.classList.toggle('on', k === step));
+    const last = step === TOTAL - 1;
+    next.textContent = last ? 'Dar acesso e começar' : 'Próximo';
+    next.classList.toggle('grant', last);
+    skip.style.visibility = last ? 'hidden' : 'visible';
+    if (step === 0) animateStorage();
+    if (step === 1) setTimeout(demo, 500); else stopDemo();
+  }
+  next.onclick = () => step < TOTAL - 1 ? go(step + 1) : flash('Abriria a configuração do Android');
+  skip.onclick = () => go(TOTAL - 1);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight') go(step + 1);
+    if (e.key === 'ArrowLeft') go(step - 1);
+  });
+
+  // ---- passo 1: barra enchendo ----
+  function animateStorage() {
+    const parts = [['b1', 25], ['b2', 4], ['b3', 3], ['b4', 67]];
+    parts.forEach(([id]) => document.getElementById(id).style.width = '0');
+    let used = 0;
+    const el = document.getElementById('used');
+    requestAnimationFrame(() => parts.forEach(([id, w]) => document.getElementById(id).style.width = w + '%'));
+    clearInterval(animateStorage.t);
+    animateStorage.t = setInterval(() => {
+      used = Math.min(127, used + 4);
+      el.innerHTML = `${used} GB <small>de 128 GB</small>`;
+      if (used >= 127) clearInterval(animateStorage.t);
+    }, 35);
+  }
+
+  // ---- passo 2: carta arrastável ----
+  const deck = document.getElementById('deck');
+  const art = h => `radial-gradient(circle at 25% 20%, hsl(${h} 85% 62%), transparent 55%), radial-gradient(circle at 80% 75%, hsl(${h + 40} 80% 50%), transparent 60%), linear-gradient(160deg, hsl(${h} 50% 20%), hsl(${h + 40} 55% 12%))`;
+  const CARDS = [{ size: '144 MB', video: true, h: 350 }, { size: '96 MB', video: true, h: 200 }, { size: '9 MB', video: false, h: 30 }, { size: '61 MB', video: true, h: 140 }];
+  let ci = 0;
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  deck.appendChild(toast);
+
+  function cardHTML(c, back) {
+    return `<div class="card ${back ? 'back' : ''}">
+      <div class="art-bg" style="background:${art(c.h)}"></div>
+      <span class="kind">${c.video ? '▶ VÍDEO' : 'FOTO'}</span>
+      <span class="size">${c.size}</span>
+      ${c.video ? '<div class="play">▶</div>' : ''}
+      <div class="stamp del">APAGAR</div><div class="stamp keep">MANTER</div><div class="stamp up">COMPRIMIR</div>
+    </div>`;
+  }
+  function renderDeck() {
+    deck.querySelectorAll('.card').forEach(c => c.remove());
+    const a = CARDS[ci % CARDS.length], b = CARDS[(ci + 1) % CARDS.length];
+    deck.insertAdjacentHTML('afterbegin', cardHTML(b, true) + cardHTML(a, false));
+    drag(deck.querySelector('.card:not(.back)'));
+  }
+
+  // Demonstração: um "dedo" arrasta a carta pros três lados e volta, em loop,
+  // até a pessoa encostar na carta. Depois disso não volta mais.
+  const finger = document.createElement('div');
+  finger.className = 'finger';
+  deck.appendChild(finger);
+  let demoOn = false, touched = false, demoRun = 0;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+
+  async function demo() {
+    if (touched || demoOn) return;
+    demoOn = true;
+    const run = ++demoRun;
+    const moves = [[-70, 0, 'del'], [70, 0, 'keep'], [0, -70, 'up']];
+    while (demoOn && run === demoRun) {
+      for (const [x, y, stamp] of moves) {
+        if (!demoOn || run !== demoRun) return;
+        const card = deck.querySelector('.card:not(.back)');
+        const st = card.querySelector('.stamp.' + stamp);
+        card.style.transition = 'transform .55s cubic-bezier(.45,.05,.35,1)';
+        finger.style.opacity = 1;
+        await wait(250);
+        if (!demoOn || run !== demoRun) return;
+        card.style.transform = `translate(${x}px, ${y}px) rotate(${x / 16}deg)`;
+        finger.style.transform = `translate(${x}px, ${y}px)`;
+        st.style.transition = 'opacity .4s';
+        st.style.opacity = 1;
+        await wait(900);
+        if (!demoOn || run !== demoRun) return;
+        card.style.transform = '';
+        finger.style.transform = '';
+        st.style.opacity = 0;
+        await wait(650);
+      }
+      finger.style.opacity = 0;
+      await wait(900);
+    }
+  }
+  function stopDemo() {
+    demoOn = false;
+    demoRun++;
+    finger.style.opacity = 0;
+    finger.style.transform = '';
+    const card = deck.querySelector('.card:not(.back)');
+    if (card) {
+      card.style.transform = '';
+      card.querySelectorAll('.stamp').forEach(s => { s.style.transition = ''; s.style.opacity = 0; });
+    }
+  }
+  deck.addEventListener('pointerdown', () => {
+    touched = true;
+    stopDemo();
+    document.getElementById('try').style.opacity = 0;
+  }, true);
+  function flash(text) {
+    toast.textContent = text;
+    toast.style.opacity = 1;
+    clearTimeout(flash.t);
+    flash.t = setTimeout(() => toast.style.opacity = 0, 900);
+  }
+  function drag(card) {
+    let sx, sy, dx = 0, dy = 0, on = false;
+    const del = card.querySelector('.stamp.del'), keep = card.querySelector('.stamp.keep'), up = card.querySelector('.stamp.up');
+    card.onpointerdown = e => { on = true; sx = e.clientX; sy = e.clientY; card.setPointerCapture(e.pointerId); card.style.transition = 'none'; };
+    card.onpointermove = e => {
+      if (!on) return;
+      dx = e.clientX - sx; dy = Math.min(0, e.clientY - sy);
+      card.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx / 16}deg)`;
+      const vertical = -dy > Math.abs(dx);
+      del.style.opacity = vertical ? 0 : Math.min(Math.max(-dx, 0) / 70, 1);
+      keep.style.opacity = vertical ? 0 : Math.min(Math.max(dx, 0) / 70, 1);
+      up.style.opacity = vertical ? Math.min(-dy / 70, 1) : 0;
+    };
+    card.onpointerup = card.onpointercancel = () => {
+      if (!on) return;
+      on = false;
+      card.style.transition = 'transform .25s ease';
+      const vertical = -dy > Math.abs(dx);
+      if (vertical && -dy > 80) leave(card, `translate(0, -420px)`, 'Vai pra fila de compressão');
+      else if (dx < -80) leave(card, `translate(-420px, 30px) rotate(-24deg)`, 'Marcado pra apagar');
+      else if (dx > 80) leave(card, `translate(420px, 30px) rotate(24deg)`, 'Mantido');
+      else { card.style.transform = ''; [del, keep, up].forEach(s => s.style.opacity = 0); }
+      dx = dy = 0;
+    };
+  }
+  function leave(card, transform, text) {
+    card.style.transform = transform;
+    flash(text);
+    setTimeout(() => { ci++; renderDeck(); }, 240);
+  }
+
+  renderDeck();
+  // onboarding.html#2 abre direto no passo 2
+  go((parseInt(location.hash.slice(1), 10) || 1) - 1);
+</script>
+</body>
+</html>
