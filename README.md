@@ -75,7 +75,7 @@ Na primeira abertura o app explica e pede o **acesso a todos os arquivos**. Nada
 
 ## Limitações
 
-- **Só Android**, e Android 11+. No iPhone não existe "ler o armazenamento".
+- **Só Android**, e Android 11+. No iPhone não existe "ler o armazenamento": só a biblioteca do Fotos, que não vê a mídia do WhatsApp nem pastas. Por isso o projeto não tem a pasta `ios/`.
 - **Fora da Play Store**: o Google restringe a permissão de acesso a todos os arquivos pra apps comuns. Pra uso pessoal (APK direto) não muda nada.
 - **"Apps e dados" no painel é estimado**: é o que sobra depois de descontar sistema e arquivos visíveis. Separar app por app exigiria outra permissão.
 - **Compressão roda com o app aberto**, um vídeo por vez.
