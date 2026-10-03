@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_swipe/media/native_bridge.dart';
@@ -33,6 +34,13 @@ Future<void> pumpOnboarding(
   await tester.binding.setSurfaceSize(const Size(400, 860));
   await tester.pumpWidget(MaterialApp(
     theme: buildTheme(),
+    // Igual a um Android de verdade: o sistema informa uma distância mínima
+    // de arrasto menor que o padrão do Flutter (18), e o PageView usa ela.
+    // Sem isso o teste não pegava a carta perdendo o gesto pro PageView.
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(gestureSettings: const DeviceGestureSettings(touchSlop: 8)),
+      child: child!,
+    ),
     home: Scaffold(
       body: OnboardingScreen(
         native: _FakeNative(),
@@ -83,13 +91,37 @@ void main() {
     await tester.tap(find.text('Próximo'));
     await settle(tester);
 
-    await tester.drag(find.text('144 MB'), const Offset(-150, 0));
+    // Aos pouquinhos, como um dedo de verdade: com um salto só de 150 px os
+    // dois reconhecedores passam do limite no mesmo evento e a carta ganha
+    // por chegar primeiro, escondendo o bug.
+    final gesture = await tester.startGesture(tester.getCenter(find.text('144 MB')));
+    for (var i = 0; i < 75; i++) {
+      await gesture.moveBy(const Offset(-2, 0));
+      await tester.pump(const Duration(milliseconds: 8));
+    }
+    await gesture.up();
     await settle(tester);
 
     expect(find.text('Marcado pra apagar'), findsOneWidget);
     expect(find.text('👆 Experimenta: arrasta a carta'), findsNothing);
     // arrastar a carta não pode trocar de página (o PageView disputa o gesto)
     expect(find.text('Do maior pro menor,\nno swipe.'), findsOneWidget);
+  });
+
+  testWidgets('arrastar fora da carta continua trocando de passo', (tester) async {
+    await pumpOnboarding(tester, onGrant: () {});
+    await tester.tap(find.text('Próximo'));
+    await settle(tester);
+
+    final gesture = await tester.startGesture(tester.getCenter(find.text('Do maior pro menor,\nno swipe.')));
+    for (var i = 0; i < 60; i++) {
+      await gesture.moveBy(const Offset(-5, 0));
+      await tester.pump(const Duration(milliseconds: 8));
+    }
+    await gesture.up();
+    await settle(tester);
+
+    expect(find.text('Nada some sem\ntu confirmar.'), findsOneWidget);
   });
 
   testWidgets('só a permissão, pra quem já viu o onboarding', (tester) async {

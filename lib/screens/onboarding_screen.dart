@@ -347,21 +347,16 @@ class _SwipeDemoState extends State<_SwipeDemo> with TickerProviderStateMixin {
 
   Offset get _offset => _touched ? _drag : _demoOffset.value;
 
-  /// A carta fica dentro de um PageView, e o arrasto horizontal dele ganharia
-  /// a disputa do gesto (aceita com menos movimento que o pan), trocando de
-  /// página em vez de mexer a carta. O ImmediateMultiDrag pega o gesto assim
-  /// que o dedo encosta na carta; fora dela, arrastar troca de página normal.
-  Drag _onStart(Offset _) {
+  void _onStart() {
     if (!_touched) {
       _demo.stop();
       setState(() => _touched = true);
     }
-    return _CardDrag(onUpdate: _onUpdate, onEnd: _onEnd);
   }
 
-  void _onUpdate(DragUpdateDetails d) {
+  void _onMove(Offset delta) {
     if (_fly.isAnimating) return;
-    setState(() => _drag = Offset(_drag.dx + d.delta.dx, (_drag.dy + d.delta.dy).clamp(-400.0, 0.0)));
+    setState(() => _drag = Offset(_drag.dx + delta.dx, (_drag.dy + delta.dy).clamp(-400.0, 0.0)));
   }
 
   Future<void> _onEnd() async {
@@ -418,10 +413,12 @@ class _SwipeDemoState extends State<_SwipeDemo> with TickerProviderStateMixin {
                   Positioned.fill(
                     child: RawGestureDetector(
                       gestures: {
-                        ImmediateMultiDragGestureRecognizer:
-                            GestureRecognizerFactoryWithHandlers<ImmediateMultiDragGestureRecognizer>(
-                          ImmediateMultiDragGestureRecognizer.new,
-                          (recognizer) => recognizer.onStart = _onStart,
+                        _GrabGestureRecognizer: GestureRecognizerFactoryWithHandlers<_GrabGestureRecognizer>(
+                          _GrabGestureRecognizer.new,
+                          (r) => r
+                            ..onStart = _onStart
+                            ..onMove = _onMove
+                            ..onEnd = _onEnd,
                         ),
                       },
                       child: Transform.translate(
@@ -494,21 +491,42 @@ class _SwipeDemoState extends State<_SwipeDemo> with TickerProviderStateMixin {
   }
 }
 
-/// Liga o arrasto do ImmediateMultiDrag aos métodos da carta.
-class _CardDrag extends Drag {
-  _CardDrag({required this.onUpdate, required this.onEnd});
-
-  final GestureDragUpdateCallback onUpdate;
-  final VoidCallback onEnd;
+/// Pega o gesto no instante em que o dedo encosta na carta.
+///
+/// A carta fica dentro de um PageView. Qualquer reconhecedor de arrasto
+/// normal espera o dedo andar uma distância mínima; o do PageView usa a do
+/// sistema (~8 px no Android), menor que a padrão do Flutter (18), e ganhava
+/// a disputa: arrastar a carta trocava de passo. Aceitando já no toque, o
+/// PageView perde antes de começar. Fora da carta, arrastar troca de passo
+/// normal.
+class _GrabGestureRecognizer extends OneSequenceGestureRecognizer {
+  VoidCallback? onStart;
+  ValueChanged<Offset>? onMove;
+  VoidCallback? onEnd;
 
   @override
-  void update(DragUpdateDetails details) => onUpdate(details);
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
+    onStart?.call();
+  }
 
   @override
-  void end(DragEndDetails details) => onEnd();
+  void handleEvent(PointerEvent event) {
+    if (event is PointerMoveEvent) {
+      // delta da tela, não o local: a carta tá girada, e o local giraria junto.
+      onMove?.call(event.delta);
+    } else if (event is PointerUpEvent || event is PointerCancelEvent) {
+      stopTrackingPointer(event.pointer);
+      onEnd?.call();
+    }
+  }
 
   @override
-  void cancel() => onEnd();
+  void didStopTrackingLastPointer(int pointer) {}
+
+  @override
+  String get debugDescription => 'grab card';
 }
 
 class _DemoFace extends StatelessWidget {
