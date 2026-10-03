@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="96" alt="Ícone do app" align="right">
+
 # media-delete-matcher
 
 Um "Tinder de mídias" pra Android: passa pelas fotos e vídeos do celular **do maior pro menor**, decide no swipe e só apaga no final, numa confirmação só.

@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ícone · media-delete-matcher</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0b0f; --surface: #15151c; --surface-2: #1e1e28; --line: #2a2a36;
+    --text: #f2f2f5; --muted: #8b8b99; --accent: #7c6cff; --keep: #2fd47a;
+    --font: 'Inter', system-ui, sans-serif; --display: 'Space Grotesk', 'Inter', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .page { max-width: 1240px; margin: 0 auto; padding: 48px 16px 120px; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: rgba(124,108,255,.12); padding: 4px 10px; border-radius: 99px; margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: clamp(32px, 6vw, 48px); line-height: 1.05; letter-spacing: -.02em; }
+  .lead { color: var(--muted); margin: 14px 0 36px; font-size: 17px; max-width: 760px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 20px; }
+  .opt { background: var(--surface); border: 2px solid transparent; border-radius: 24px; padding: 22px; transition: border-color .2s, transform .2s; }
+  .opt.voted { border-color: var(--keep); transform: translateY(-2px); }
+  .head { display: flex; gap: 18px; align-items: center; }
+  .letter { font-family: var(--display); font-size: 13px; color: var(--accent); letter-spacing: .06em; }
+  .opt h2 { font-family: var(--display); font-size: 22px; letter-spacing: -.01em; }
+  .opt p { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+  /* Ícone adaptativo: o SVG tem 108 de lado e o launcher mostra o miolo de 72.
+     Então o SVG fica 150% do tamanho visível, centralizado, e a máscara corta. */
+  .icon { position: relative; overflow: hidden; flex-shrink: 0; }
+  .icon svg { position: absolute; width: 150%; height: 150%; left: -25%; top: -25%; display: block; }
+  .m-circle { border-radius: 50%; }
+  .m-squircle { border-radius: 32%; }
+  .m-rounded { border-radius: 22%; }
+
+  .row { display: flex; align-items: flex-end; gap: 16px; margin-top: 20px; flex-wrap: wrap; }
+  .lbl { font-size: 11px; color: var(--muted); text-align: center; margin-top: 6px; }
+
+  .homes { display: grid; gap: 10px; margin-top: 20px; }
+  .home { border-radius: 16px; padding: 16px 10px 12px; display: flex; justify-content: space-around; }
+  .home.dark { background: radial-gradient(circle at 30% 20%, #3a2a6e, transparent 60%), linear-gradient(160deg, #1b1636, #0a0a12); }
+  .home.light { background: radial-gradient(circle at 70% 20%, #ffd6a8, transparent 60%), linear-gradient(160deg, #f4efe6, #dfe7f5); }
+  .app { display: flex; flex-direction: column; align-items: center; width: 64px; }
+  .app span { font-size: 10px; margin-top: 5px; white-space: nowrap; }
+  .home.dark .app span { color: #fff; }
+  .home.light .app span { color: #1b1b22; }
+  .dummy { width: 48px; height: 48px; border-radius: 50%; }
+
+  .vote { margin-top: 18px; width: 100%; border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 14px; padding: 12px; font-family: var(--font); font-weight: 700; font-size: 14px; cursor: pointer; }
+  .vote:hover { border-color: var(--muted); }
+  .opt.voted .vote { background: var(--keep); color: #04210f; border-color: var(--keep); }
+
+  .bar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: var(--surface-2); border: 1px solid var(--line); border-radius: 99px; padding: 10px 18px; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.5); display: flex; gap: 10px; align-items: center; max-width: calc(100% - 32px); }
+  .bar b { color: var(--keep); }
+</style>
+</head>
+<body>
+<div class="page">
+  <span class="tag">Proposta · Ícone</span>
+  <h1>Qual vai ser a cara do app?</h1>
+  <p class="lead">Seis conceitos na paleta do app. Cada um aparece como o Android mostra de verdade: cortado pela máscara do launcher (círculo, squircle, quadrado arredondado), em tamanhos reais e numa tela inicial clara e escura. Vota no que tu curtir.</p>
+
+  <div class="grid" id="grid"></div>
+</div>
+<div class="bar" id="bar">Nenhum voto ainda. Toca em <b>"Votar nesse"</b>.</div>
+
+<script>
+  // Cada SVG tem 108×108 (o tamanho de um ícone adaptativo do Android).
+  // O launcher mostra só o miolo de 72×72; o que importa fica no centro.
+  // "ID" é trocado por um prefixo único em cada cópia (gradientes não colidem).
+  const OPTIONS = [
+    {
+      key: 'A', name: 'Leque de cartas',
+      text: 'As três decisões do app em três cartas: apagar, manter e a da vez (um vídeo). É a ilustração do onboarding.',
+      svg: `
+        <defs>
+          <linearGradient id="ID-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#22222f"/><stop offset="1" stop-color="#0b0b0f"/></linearGradient>
+          <linearGradient id="ID-f" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4d5e"/><stop offset="1" stop-color="#ff7a45"/></linearGradient>
+        </defs>
+        <rect width="108" height="108" fill="url(#ID-bg)"/>
+        <g transform="translate(54 57)">
+          <rect x="-14" y="-20" width="28" height="40" rx="7" fill="#7c6cff" transform="translate(-13 3) rotate(-18)"/>
+          <rect x="-14" y="-20" width="28" height="40" rx="7" fill="#2fd47a" transform="translate(13 3) rotate(18)"/>
+          <rect x="-15.5" y="-21.5" width="31" height="43" rx="7.5" fill="url(#ID-f)"/>
+          <path d="M-5 -8 L9 0 L-5 8 Z" fill="#fff"/>
+        </g>`,
+    },
+    {
+      key: 'B', name: 'Carta voando',
+      text: 'Uma carta saindo de lado, com rastro de movimento. Fundo quente, direto e reconhecível de longe.',
+      svg: `
+        <defs>
+          <linearGradient id="ID-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4d5e"/><stop offset="1" stop-color="#ff8a45"/></linearGradient>
+        </defs>
+        <rect width="108" height="108" fill="url(#ID-bg)"/>
+        <g stroke="#fff" stroke-opacity=".6" stroke-width="4" stroke-linecap="round">
+          <line x1="66" y1="42" x2="80" y2="42"/><line x1="70" y1="54" x2="86" y2="54"/><line x1="66" y1="66" x2="78" y2="66"/>
+        </g>
+        <g transform="translate(47 55) rotate(-14)">
+          <rect x="-16" y="-22" width="32" height="44" rx="8" fill="#fff"/>
+          <path d="M-5 -8 L9 0 L-5 8 Z" fill="#ff4d5e"/>
+        </g>`,
+    },
+    {
+      key: 'C', name: '‹ carta ›',
+      text: 'O gesto em si: a carta no meio, apagar à esquerda (vermelho) e manter à direita (verde). Lê bem até pequeno.',
+      svg: `
+        <defs>
+          <linearGradient id="ID-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1c1c27"/><stop offset="1" stop-color="#0b0b0f"/></linearGradient>
+        </defs>
+        <rect width="108" height="108" fill="url(#ID-bg)"/>
+        <path d="M35 45 L27 54 L35 63" stroke="#ff4d5e" stroke-width="6.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M73 45 L81 54 L73 63" stroke="#2fd47a" stroke-width="6.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="42" y="37" width="24" height="34" rx="6" fill="#f2f2f5"/>
+        <path d="M50 48 L60 54 L50 60 Z" fill="#0b0b0f"/>`,
+    },
+    {
+      key: 'D', name: 'Do maior pro menor',
+      text: 'Três barras em ordem de tamanho: a ideia de atacar o que mais ocupa primeiro. Mais "ferramenta", menos "galeria".',
+      svg: `
+        <defs>
+          <linearGradient id="ID-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8b7cff"/><stop offset="1" stop-color="#4a3bd1"/></linearGradient>
+        </defs>
+        <rect width="108" height="108" fill="url(#ID-bg)"/>
+        <rect x="27" y="35" width="54" height="11" rx="5.5" fill="#fff"/>
+        <rect x="27" y="51" width="38" height="11" rx="5.5" fill="#fff" fill-opacity=".75"/>
+        <rect x="27" y="67" width="22" height="11" rx="5.5" fill="#fff" fill-opacity=".5"/>
+        <path d="M76 66 l2.2 5.3 5.3 2.2 -5.3 2.2 -2.2 5.3 -2.2 -5.3 -5.3 -2.2 5.3 -2.2z" fill="#ffd34d"/>`,
+    },
+    {
+      key: 'E', name: 'O gesto',
+      text: 'Um dedo arrastando pra esquerda, deixando o rastro do swipe. Abstrato, moderno, e não depende de "carta".',
+      svg: `
+        <defs>
+          <linearGradient id="ID-bg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#ff4d5e"/></linearGradient>
+        </defs>
+        <rect width="108" height="108" fill="url(#ID-bg)"/>
+        <path d="M73 62 C 64 45, 46 42, 33 50" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round"/>
+        <path d="M41 40 L30 51.5 L44 56" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="76" cy="65" r="12" fill="#fff" fill-opacity=".25"/>
+        <circle cx="76" cy="65" r="7" fill="#fff"/>`,
+    },
+    {
+      key: 'F', name: 'Leque claro',
+      text: 'O A em versão clara: se destaca no meio de ícone escuro (WhatsApp, Spotify...) e fica limpo em tema claro.',
+      svg: `
+        <defs>
+          <linearGradient id="ID-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e9e9f1"/></linearGradient>
+          <linearGradient id="ID-f" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4d5e"/><stop offset="1" stop-color="#ff7a45"/></linearGradient>
+        </defs>
+        <rect width="108" height="108" fill="url(#ID-bg)"/>
+        <g transform="translate(54 57)">
+          <rect x="-14" y="-20" width="28" height="40" rx="7" fill="#1e1e28" transform="translate(-13 3) rotate(-18)"/>
+          <rect x="-14" y="-20" width="28" height="40" rx="7" fill="#2fd47a" transform="translate(13 3) rotate(18)"/>
+          <rect x="-15.5" y="-21.5" width="31" height="43" rx="7.5" fill="url(#ID-f)"/>
+          <path d="M-5 -8 L9 0 L-5 8 Z" fill="#fff"/>
+        </g>`,
+    },
+  ];
+
+  let uid = 0;
+  const svg = o => `<svg viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">${o.svg.replaceAll('ID', 'i' + (uid++))}</svg>`;
+  const icon = (o, size, mask) => `<div class="icon ${mask}" style="width:${size}px;height:${size}px">${svg(o)}</div>`;
+  const dummy = (c1, c2) => `<div class="app"><div class="dummy" style="background:linear-gradient(135deg,${c1},${c2})"></div><span>&nbsp;</span></div>`;
+
+  const grid = document.getElementById('grid');
+  grid.innerHTML = OPTIONS.map(o => `
+    <article class="opt" data-key="${o.key}">
+      <div class="head">
+        ${icon(o, 112, 'm-circle')}
+        <div>
+          <div class="letter">OPÇÃO ${o.key}</div>
+          <h2>${o.name}</h2>
+          <p>${o.text}</p>
+        </div>
+      </div>
+      <div class="row">
+        <div>${icon(o, 72, 'm-squircle')}<div class="lbl">squircle</div></div>
+        <div>${icon(o, 72, 'm-rounded')}<div class="lbl">arredondado</div></div>
+        <div>${icon(o, 48, 'm-circle')}<div class="lbl">48 px</div></div>
+        <div>${icon(o, 32, 'm-circle')}<div class="lbl">32 px</div></div>
+      </div>
+      <div class="homes">
+        <div class="home dark">
+          ${dummy('#25d366', '#128c7e')}
+          <div class="app">${icon(o, 48, 'm-circle')}<span>Media Swipe</span></div>
+          ${dummy('#1ed760', '#0b8a3e')}
+        </div>
+        <div class="home light">
+          ${dummy('#ffffff', '#d9d9e3')}
+          <div class="app">${icon(o, 48, 'm-squircle')}<span>Media Swipe</span></div>
+          ${dummy('#4285f4', '#34a853')}
+        </div>
+      </div>
+      <button class="vote">Votar nesse</button>
+    </article>`).join('');
+
+  const bar = document.getElementById('bar');
+  function choose(key) {
+    document.querySelectorAll('.opt').forEach(el => {
+      const on = el.dataset.key === key;
+      el.classList.toggle('voted', on);
+      el.querySelector('.vote').textContent = on ? '✓ Meu voto' : 'Votar nesse';
+    });
+    const o = OPTIONS.find(x => x.key === key);
+    bar.innerHTML = key
+      ? `Teu voto: <b>${o.key} · ${o.name}</b>. Me fala no chat que eu aplico no app.`
+      : 'Nenhum voto ainda. Toca em <b>"Votar nesse"</b>.';
+    try { localStorage.setItem('icon-vote', key || ''); } catch (_) {}
+  }
+  grid.addEventListener('click', e => {
+    const btn = e.target.closest('.vote');
+    if (!btn) return;
+    const key = btn.closest('.opt').dataset.key;
+    choose(document.querySelector('.opt.voted')?.dataset.key === key ? null : key);
+  });
+  try { const saved = localStorage.getItem('icon-vote'); if (saved) choose(saved); } catch (_) {}
+</script>
+</body>
+</html>
