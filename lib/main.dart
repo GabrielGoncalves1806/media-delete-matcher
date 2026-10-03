@@ -33,7 +33,7 @@ class MediaSwipeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'media_swipe',
+      title: 'Media Swipe',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       home: HomeScreen(library: library, store: store),
