@@ -8,6 +8,7 @@ import '../media/media_library.dart';
 import '../media/native_bridge.dart';
 import '../theme.dart';
 import 'duplicates_screen.dart';
+import 'kept_screen.dart';
 import 'review_screen.dart';
 import 'swipe_screen.dart';
 import 'trash_screen.dart';
@@ -181,6 +182,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  int get _keptCount {
+    final kept = widget.store.kept;
+    return kept.isEmpty ? 0 : _library.files.where((f) => kept.contains(f.path)).length;
+  }
+
   Widget _buildReady() {
     final isDecided = widget.store.isDecided;
     final all = _library.all(_filter, isDecided: isDecided);
@@ -203,6 +209,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               action: 'Revisar',
               color: AppColors.delete,
               onTap: () => _push(ReviewScreen(library: _library, store: widget.store)),
+            ),
+          if (_keptCount > 0)
+            _ActionCard(
+              icon: Icons.bookmark_border_rounded,
+              text: 'Mantidos · ${plural(_keptCount, 'item', 'itens')}',
+              action: 'Rever',
+              color: AppColors.keep,
+              onTap: () => _push(KeptScreen(library: _library, store: widget.store)),
             ),
           if (_library.trash.bytes > 0)
             _ActionCard(

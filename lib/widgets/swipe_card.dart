@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme.dart';
 
@@ -31,6 +32,9 @@ class SwipeCardState extends State<SwipeCard> with SingleTickerProviderStateMixi
   Offset _offset = Offset.zero;
   bool _leaving = false;
 
+  /// Já passou do ponto de decisão no arrasto atual (pra vibrar uma vez só).
+  bool _armed = false;
+
   @override
   void dispose() {
     _curve.dispose();
@@ -44,6 +48,7 @@ class SwipeCardState extends State<SwipeCard> with SingleTickerProviderStateMixi
   Future<void> swipe(SwipeDirection direction) async {
     if (_leaving) return;
     _leaving = true;
+    direction == SwipeDirection.delete ? HapticFeedback.mediumImpact() : HapticFeedback.lightImpact();
     final sign = direction == SwipeDirection.delete ? -1 : 1;
     await _animateTo(Offset(sign * _width * 1.5, _offset.dy + 40));
     if (mounted) widget.onSwiped(direction);
@@ -57,9 +62,13 @@ class SwipeCardState extends State<SwipeCard> with SingleTickerProviderStateMixi
   void _onPanUpdate(DragUpdateDetails d) {
     if (_leaving) return;
     setState(() => _offset += Offset(d.delta.dx, d.delta.dy * 0.3));
+    final armed = _offset.dx.abs() > _width * 0.28;
+    if (armed && !_armed) HapticFeedback.selectionClick();
+    _armed = armed;
   }
 
   void _onPanEnd(DragEndDetails d) {
+    _armed = false;
     if (_leaving) return;
     final vx = d.velocity.pixelsPerSecond.dx;
     final passed = _offset.dx.abs() > _width * 0.28 || vx.abs() > 900;

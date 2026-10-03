@@ -9,24 +9,31 @@ import 'media_thumb.dart';
 
 /// Mostra a foto ou o vídeo de um arquivo.
 ///
-/// Sempre começa pela miniatura (rápida). Quando [active] é true, carrega o
-/// original: foto em resolução de tela, vídeo tocando mudo em loop.
-/// Tocar liga/desliga o som do vídeo.
+/// Sempre começa pela miniatura (rápida). Com [preload], já carrega o
+/// original por baixo (foto em resolução de tela, vídeo pausado); quando
+/// [active] vira true, o vídeo começa a tocar mudo em loop, sem piscar.
+/// Tocar liga/desliga o som.
 class MediaPreview extends StatefulWidget {
   const MediaPreview({
     super.key,
     required this.file,
     required this.thumbnails,
     required this.active,
+    this.preload = false,
     this.onDuration,
+    this.onLongPress,
   });
 
   final MediaFile file;
   final Thumbnails thumbnails;
   final bool active;
+  final bool preload;
 
   /// Avisa a duração quando o vídeo termina de carregar.
   final ValueChanged<Duration>? onDuration;
+
+  /// O vídeo fica pausado enquanto o Future não termina (tela cheia aberta).
+  final Future<void> Function()? onLongPress;
 
   @override
   State<MediaPreview> createState() => _MediaPreviewState();
@@ -37,16 +44,23 @@ class _MediaPreviewState extends State<MediaPreview> {
   bool _muted = true;
   bool _loading = false;
 
+  bool get _wantsOriginal => widget.active || widget.preload;
+
   @override
   void initState() {
     super.initState();
-    if (widget.active) _loadVideo();
+    if (_wantsOriginal) _loadVideo();
   }
 
   @override
   void didUpdateWidget(MediaPreview old) {
     super.didUpdateWidget(old);
-    if (widget.active && !old.active) _loadVideo();
+    if (widget.active && !old.active) {
+      final video = _video;
+      video == null ? _loadVideo() : video.play();
+    } else if (_wantsOriginal) {
+      _loadVideo();
+    }
   }
 
   @override
@@ -71,7 +85,7 @@ class _MediaPreviewState extends State<MediaPreview> {
     }
     await controller.setLooping(true);
     await controller.setVolume(0);
-    await controller.play();
+    if (widget.active) await controller.play();
     widget.onDuration?.call(controller.value.duration);
     setState(() => _video = controller);
   }
@@ -83,17 +97,27 @@ class _MediaPreviewState extends State<MediaPreview> {
     video.setVolume(_muted ? 0 : 1);
   }
 
+  Future<void> _longPress() async {
+    final open = widget.onLongPress;
+    if (open == null) return;
+    final video = _video;
+    await video?.pause();
+    await open();
+    if (mounted && widget.active) await video?.play();
+  }
+
   @override
   Widget build(BuildContext context) {
     final file = widget.file;
     final video = _video;
     return GestureDetector(
       onTap: _toggleSound,
+      onLongPress: widget.onLongPress == null ? null : _longPress,
       child: Stack(
         fit: StackFit.expand,
         children: [
           MediaThumb(path: file.path, isVideo: file.isVideo, thumbnails: widget.thumbnails),
-          if (widget.active && !file.isVideo)
+          if (_wantsOriginal && !file.isVideo)
             Image.file(
               File(file.path),
               fit: BoxFit.cover,
@@ -111,13 +135,13 @@ class _MediaPreviewState extends State<MediaPreview> {
                 child: VideoPlayer(video),
               ),
             ),
-          if (file.isVideo)
+          if (file.isVideo && widget.active)
             Positioned(
               right: 14,
               top: 52,
               child: _SoundBadge(muted: _muted),
             ),
-          if (video != null)
+          if (video != null && widget.active)
             Positioned(
               left: 0,
               right: 0,

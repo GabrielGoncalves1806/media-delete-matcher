@@ -58,6 +58,16 @@ void main() {
       expect(store.isDecided('b'), isFalse);
     });
 
+    test('forgetAll devolve vários pro swipe de uma vez', () {
+      store.keep('a');
+      store.keep('b');
+      store.markForDeletion('c', 10);
+
+      store.forgetAll(['a', 'c']);
+      expect(store.kept, {'b'});
+      expect(store.markedCount, 0);
+    });
+
     test('desmarcar e remarcar na revisão', () {
       store.markForDeletion('a', 100);
 

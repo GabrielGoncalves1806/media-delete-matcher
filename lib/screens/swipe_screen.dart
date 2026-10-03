@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets/media_preview.dart';
 import '../widgets/swipe_card.dart';
 import 'review_screen.dart';
+import 'viewer_screen.dart';
 
 class SwipeScreen extends StatefulWidget {
   const SwipeScreen({
@@ -33,6 +34,22 @@ class _SwipeScreenState extends State<SwipeScreen> {
       widget.files.where((f) => !widget.store.isDecided(f.path)).toList();
   final _history = <MediaFile>[];
   var _cardKey = GlobalKey<SwipeCardState>();
+
+  /// Uma GlobalKey por carta visível. Quando a carta de baixo sobe, o Flutter
+  /// move o widget (com o vídeo já carregado) em vez de criar outro do zero.
+  final _faceKeys = <String, GlobalKey>{};
+
+  GlobalKey _faceKey(String path) => _faceKeys.putIfAbsent(path, GlobalKey.new);
+
+  Future<void> _openViewer(MediaFile file) async {
+    final decision = await Navigator.of(context).push<SwipeDirection>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => ViewerScreen(file: file, thumbnails: widget.library.thumbnails),
+      ),
+    );
+    if (decision != null) await _cardKey.currentState?.swipe(decision);
+  }
 
   MediaFile? get _current => _queue.isEmpty ? null : _queue.first;
 
@@ -97,6 +114,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
   Widget build(BuildContext context) {
     final current = _current;
     final next = _queue.length > 1 ? _queue[1] : null;
+    _faceKeys.removeWhere((path, _) => path != current?.path && path != next?.path);
 
     return Scaffold(
       body: SafeArea(
@@ -122,7 +140,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
                               child: Transform.scale(
                                 scale: 0.95,
                                 child: _CardFace(
-                                  key: ValueKey('next-${next.path}'),
+                                  key: _faceKey(next.path),
                                   file: next,
                                   library: widget.library,
                                   active: false,
@@ -133,10 +151,11 @@ class _SwipeScreenState extends State<SwipeScreen> {
                             key: _cardKey,
                             onSwiped: _onSwiped,
                             child: _CardFace(
-                              key: ValueKey('top-${current.path}'),
+                              key: _faceKey(current.path),
                               file: current,
                               library: widget.library,
                               active: true,
+                              onLongPress: () => _openViewer(current),
                             ),
                           ),
                         ],
@@ -159,7 +178,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
                   style: TextStyle(color: AppColors.muted, fontSize: 12),
                   children: [
                     TextSpan(text: '← apagar', style: TextStyle(color: AppColors.delete)),
-                    TextSpan(text: '  ·  toque = som  ·  '),
+                    TextSpan(text: '  ·  segura = tela cheia  ·  '),
                     TextSpan(text: 'manter →', style: TextStyle(color: AppColors.keep)),
                   ],
                 ),
@@ -241,11 +260,15 @@ class _CardFace extends StatefulWidget {
     required this.file,
     required this.library,
     required this.active,
+    this.onLongPress,
   });
 
   final MediaFile file;
   final MediaLibrary library;
+
+  /// false = carta de baixo: carrega o vídeo/foto, mas não toca.
   final bool active;
+  final Future<void> Function()? onLongPress;
 
   @override
   State<_CardFace> createState() => _CardFaceState();
@@ -279,6 +302,8 @@ class _CardFaceState extends State<_CardFace> {
               file: file,
               thumbnails: widget.library.thumbnails,
               active: widget.active,
+              preload: true,
+              onLongPress: widget.onLongPress,
               onDuration: (d) => setState(() => _duration = d),
             ),
             const IgnorePointer(
