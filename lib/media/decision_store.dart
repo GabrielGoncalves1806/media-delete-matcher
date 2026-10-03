@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'json_file.dart';
 
 /// Guarda as decisões do swipe (por caminho do arquivo) e persiste entre
 /// aberturas do app.
@@ -10,73 +13,99 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// - [marked]: itens marcados pra apagar, ainda não confirmados.
 /// - [unmarkedInReview]: desmarcados na revisão; dá pra marcar de novo
 ///   enquanto a revisão estiver aberta.
+///
+/// Grava num arquivo JSON, agrupando as mudanças: swipes seguidos viram uma
+/// gravação só, [saveDelay] depois do último. [flush] grava na hora (o app
+/// chama ao ir pro fundo).
 class DecisionStore extends ChangeNotifier {
-  static const _keptKey = 'v2.kept';
-  static const _markedKey = 'v2.marked';
-  static const _freedKey = 'freedBytes';
+  DecisionStore(this._file, {this.saveDelay = const Duration(milliseconds: 500)});
 
-  /// Da v1, que guardava ids do MediaStore em vez de caminhos.
-  static const _legacyKeys = ['kept', 'marked', 'hashCache'];
+  final JsonFile _file;
+  final Duration saveDelay;
 
-  late final SharedPreferences _prefs;
+  /// Versões anteriores guardavam tudo no shared_preferences.
+  static const _legacyPrefs = ['kept', 'marked', 'hashCache', 'v2.kept', 'v2.marked', 'freedBytes'];
 
   final _kept = <String>{};
   final _marked = <String, int>{}; // mantém a ordem de inserção
   final _unmarkedInReview = <String, int>{};
   int _freedBytes = 0;
+  Timer? _saveTimer;
 
+  Set<String> get kept => UnmodifiableSetView(_kept);
   Map<String, int> get marked => UnmodifiableMapView(_marked);
   Map<String, int> get unmarkedInReview => UnmodifiableMapView(_unmarkedInReview);
   int get markedCount => _marked.length;
   int get markedBytes => _marked.values.fold(0, (a, b) => a + b);
   int get freedBytes => _freedBytes;
 
-  bool isDecided(String id) => _kept.contains(id) || _marked.containsKey(id);
+  bool isDecided(String path) => _kept.contains(path) || _marked.containsKey(path);
 
   Future<void> load() async {
-    _prefs = await SharedPreferences.getInstance();
-    for (final key in _legacyKeys) {
-      await _prefs.remove(key);
+    final data = await _file.read();
+    if (data is Map<String, dynamic>) {
+      _kept.addAll((data['kept'] as List? ?? const []).cast<String>());
+      _marked.addAll((data['marked'] as Map? ?? const {}).cast<String, int>());
+      _freedBytes = data['freed'] as int? ?? 0;
+    } else {
+      await _migrateFromPrefs();
     }
-    _kept.addAll(_prefs.getStringList(_keptKey) ?? const []);
-    for (final entry in _prefs.getStringList(_markedKey) ?? const <String>[]) {
-      final sep = entry.lastIndexOf(':');
-      _marked[entry.substring(0, sep)] = int.parse(entry.substring(sep + 1));
-    }
-    _freedBytes = _prefs.getInt(_freedKey) ?? 0;
     notifyListeners();
   }
 
-  void markForDeletion(String id, int bytes) {
-    _kept.remove(id);
-    _marked[id] = bytes;
+  /// Traz as decisões da v2 (shared_preferences) e limpa as chaves antigas.
+  Future<void> _migrateFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    _kept.addAll(prefs.getStringList('v2.kept') ?? const []);
+    for (final entry in prefs.getStringList('v2.marked') ?? const <String>[]) {
+      final sep = entry.lastIndexOf(':');
+      _marked[entry.substring(0, sep)] = int.parse(entry.substring(sep + 1));
+    }
+    _freedBytes = prefs.getInt('freedBytes') ?? 0;
+    for (final key in _legacyPrefs) {
+      await prefs.remove(key);
+    }
+    await flush();
+  }
+
+  void markForDeletion(String path, int bytes) {
+    _kept.remove(path);
+    _marked[path] = bytes;
     _changed();
   }
 
-  void keep(String id) {
-    _marked.remove(id);
-    _kept.add(id);
+  void keep(String path) {
+    _marked.remove(path);
+    _kept.add(path);
     _changed();
   }
 
-  /// Volta o item pro estado "sem decisão" (usado pelo desfazer do swipe).
-  void forget(String id) {
-    _kept.remove(id);
-    _marked.remove(id);
+  /// Volta o item pro estado "sem decisão" (desfazer do swipe, tela de mantidos).
+  void forget(String path) {
+    _kept.remove(path);
+    _marked.remove(path);
+    _changed();
+  }
+
+  void forgetAll(Iterable<String> paths) {
+    for (final path in paths) {
+      _kept.remove(path);
+      _marked.remove(path);
+    }
     _changed();
   }
 
   /// Tocar numa miniatura da revisão alterna entre marcado e mantido.
-  void toggleInReview(String id) {
-    final bytes = _marked.remove(id);
+  void toggleInReview(String path) {
+    final bytes = _marked.remove(path);
     if (bytes != null) {
-      _unmarkedInReview[id] = bytes;
-      _kept.add(id);
+      _unmarkedInReview[path] = bytes;
+      _kept.add(path);
     } else {
-      final restored = _unmarkedInReview.remove(id);
+      final restored = _unmarkedInReview.remove(path);
       if (restored == null) return;
-      _kept.remove(id);
-      _marked[id] = restored;
+      _kept.remove(path);
+      _marked[path] = restored;
     }
     _changed();
   }
@@ -86,21 +115,34 @@ class DecisionStore extends ChangeNotifier {
   void closeReview() => _unmarkedInReview.clear();
 
   /// Depois de ir pra lixeira: tira da lista e soma no total.
-  void confirmTrashed(List<String> ids) {
-    for (final id in ids) {
-      final bytes = _marked.remove(id);
+  void confirmTrashed(List<String> paths) {
+    for (final path in paths) {
+      final bytes = _marked.remove(path);
       if (bytes != null) _freedBytes += bytes;
     }
     _changed();
   }
 
+  /// Grava agora, sem esperar o agrupamento.
+  Future<void> flush() async {
+    _saveTimer?.cancel();
+    _saveTimer = null;
+    await _file.write({
+      'kept': _kept.toList(),
+      'marked': _marked,
+      'freed': _freedBytes,
+    });
+  }
+
   void _changed() {
     notifyListeners();
-    _prefs.setStringList(_keptKey, _kept.toList());
-    _prefs.setStringList(
-      _markedKey,
-      [for (final e in _marked.entries) '${e.key}:${e.value}'],
-    );
-    _prefs.setInt(_freedKey, _freedBytes);
+    _saveTimer?.cancel();
+    _saveTimer = Timer(saveDelay, flush);
+  }
+
+  @override
+  void dispose() {
+    _saveTimer?.cancel();
+    super.dispose();
   }
 }

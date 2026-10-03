@@ -80,7 +80,9 @@ class TrashBin {
       try {
         await File(file.path).rename('$directory/$fileName');
       } on FileSystemException {
-        continue; // sumiu, ou está em outro volume (cartão SD)
+        // Sumiu por fora do app ou sem permissão. Cartão SD não chega aqui:
+        // a varredura só olha o armazenamento interno, mesmo volume da lixeira.
+        continue;
       }
       _entries.add(TrashEntry(
         fileName: fileName,

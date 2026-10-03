@@ -1,9 +1,7 @@
-import 'dart:convert';
 import 'dart:isolate';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'file_hash.dart';
+import 'json_file.dart';
 import 'media_file.dart';
 
 enum ScanStage { partial, full }
@@ -52,7 +50,9 @@ List<List<T>> groupsOf<T>(Iterable<T> items, Object? Function(T) key) {
 ///   3. mesmo SHA-1 do arquivo inteiro
 /// Os hashes ficam salvos; a próxima varredura só calcula o que mudou.
 class DuplicateFinder {
-  static const _cacheKey = 'v2.hashCache';
+  DuplicateFinder(this._cacheFile);
+
+  final JsonFile _cacheFile;
   static const _batch = 24;
 
   /// caminho -> "tamanho:modificadoMs:parcial:completo"
@@ -63,10 +63,8 @@ class DuplicateFinder {
     required ScanProgress onProgress,
     required bool Function() isCancelled,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    _cache.addAll(
-      (jsonDecode(prefs.getString(_cacheKey) ?? '{}') as Map).cast<String, String>(),
-    );
+    final saved = await _cacheFile.read();
+    if (saved is Map) _cache.addAll(saved.cast<String, String>());
 
     final sameSize = groupsOf(files, (f) => f.size).expand((g) => g).toList();
     final partials = await _hashAll(
@@ -89,7 +87,7 @@ class DuplicateFinder {
     );
     if (isCancelled()) return [];
 
-    await prefs.setString(_cacheKey, jsonEncode(_cache));
+    await _cacheFile.write(_cache);
 
     return groupsOf(samePartial, (f) => fulls[f.path]).map(DuplicateGroup.new).toList()
       ..sort((a, b) => b.wastedBytes.compareTo(a.wastedBytes));

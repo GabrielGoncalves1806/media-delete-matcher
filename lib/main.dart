@@ -1,15 +1,24 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'media/decision_store.dart';
+import 'media/json_file.dart';
 import 'media/media_library.dart';
 import 'screens/home_screen.dart';
 import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final store = DecisionStore();
+  final dataDir = (await getApplicationSupportDirectory()).path;
+  final store = DecisionStore(JsonFile(File('$dataDir/decisions.json')));
   await store.load();
-  runApp(MediaSwipeApp(library: MediaLibrary(), store: store));
+
+  // Garante que nenhum swipe se perde se o sistema matar o app no fundo.
+  AppLifecycleListener(onHide: store.flush, onDetach: store.flush);
+
+  runApp(MediaSwipeApp(library: MediaLibrary(dataDir: dataDir), store: store));
 }
 
 class MediaSwipeApp extends StatelessWidget {

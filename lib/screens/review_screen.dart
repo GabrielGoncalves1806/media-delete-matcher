@@ -69,11 +69,22 @@ class _ReviewScreenState extends State<ReviewScreen> {
     if (!mounted) return;
     setState(() => _busy = false);
 
+    final failed = files.length - moved.length;
     if (moved.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Não consegui mover nada.')),
+        const SnackBar(content: Text('Não consegui mover nada pra lixeira.')),
       );
       return;
+    }
+    if (failed > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${plural(failed, 'arquivo não pôde', 'arquivos não puderam')} ir pra lixeira '
+            '(sumiu ou sem permissão). Continua marcado.',
+          ),
+        ),
+      );
     }
 
     final bytes = moved.fold<int>(0, (sum, p) => sum + (store.marked[p] ?? 0));

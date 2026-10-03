@@ -134,7 +134,7 @@ void main() {
       put('WhatsApp Video/v.mp4', size: 400);
       put('Screenshots/s.png', size: 10);
 
-      final library = MediaLibrary(root: root.path);
+      final library = MediaLibrary(root: root.path, dataDir: '${root.path}/.app');
       await library.scan();
       expect(library.files.first.name, 'v.mp4'); // do maior pro menor
 

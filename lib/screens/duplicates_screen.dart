@@ -22,7 +22,7 @@ class DuplicatesScreen extends StatefulWidget {
 }
 
 class _DuplicatesScreenState extends State<DuplicatesScreen> {
-  final _finder = DuplicateFinder();
+  late final _finder = DuplicateFinder(widget.library.hashCache);
   List<DuplicateGroup>? _groups;
   ScanStage _stage = ScanStage.partial;
   int _done = 0;

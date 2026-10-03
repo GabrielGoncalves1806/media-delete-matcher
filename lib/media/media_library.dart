@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:isolate';
 
+import 'json_file.dart';
 import 'media_file.dart';
 import 'media_filter.dart';
 import 'native_bridge.dart';
@@ -24,11 +26,20 @@ class Album {
 /// `.nomedia` (como a do WhatsApp quando a "visibilidade de mídia" está
 /// desligada), e lá costuma estar a maior parte do espaço.
 class MediaLibrary {
-  MediaLibrary({NativeBridge? native, this.root = '/storage/emulated/0'})
-      : native = native ?? NativeBridge();
+  MediaLibrary({
+    required this.dataDir,
+    NativeBridge? native,
+    this.root = '/storage/emulated/0',
+  }) : native = native ?? NativeBridge();
 
   final String root;
+
+  /// Pasta privada do app (caches e decisões).
+  final String dataDir;
   final NativeBridge native;
+
+  /// Cache dos hashes da busca de duplicados.
+  late final hashCache = JsonFile(File('$dataDir/hashes.json'));
 
   late final trash = TrashBin('$root/.media_swipe_trash', onFilesChanged: native.scanFiles);
   late final thumbnails = Thumbnails(native);

@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_swipe/format.dart';
 import 'package:media_swipe/media/decision_store.dart';
+import 'package:media_swipe/media/json_file.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -27,13 +30,19 @@ void main() {
   });
 
   group('DecisionStore', () {
+    late Directory dir;
+    late JsonFile file;
     late DecisionStore store;
 
     setUp(() async {
       SharedPreferences.setMockInitialValues({});
-      store = DecisionStore();
+      dir = Directory.systemTemp.createTempSync('media_swipe_store');
+      file = JsonFile(File('${dir.path}/decisions.json'));
+      store = DecisionStore(file);
       await store.load();
     });
+
+    tearDown(() => dir.deleteSync(recursive: true));
 
     test('marcar, manter e desfazer', () {
       store.markForDeletion('a', 100);
@@ -75,11 +84,55 @@ void main() {
       store.keep('k');
       store.confirmTrashed(['x']); // id desconhecido não soma nada
 
-      final reopened = DecisionStore();
+      await store.flush();
+      final reopened = DecisionStore(file);
       await reopened.load();
       expect(reopened.marked, {'a': 100});
       expect(reopened.isDecided('k'), isTrue);
       expect(reopened.freedBytes, 0);
     });
   });
+
+  group('DecisionStore: gravação', () {
+    late Directory dir;
+
+    setUp(() {
+      dir = Directory.systemTemp.createTempSync('media_swipe_store2');
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    test('agrupa vários swipes numa gravação só', () async {
+      SharedPreferences.setMockInitialValues({});
+      final file = JsonFile(File('${dir.path}/d.json'));
+      final store = DecisionStore(file, saveDelay: const Duration(milliseconds: 50));
+      await store.load();
+      final writesBefore = file.file.lastModifiedSync();
+
+      for (var i = 0; i < 200; i++) {
+        store.keep('/p/$i');
+      }
+      expect(file.file.lastModifiedSync(), writesBefore); // ainda não gravou
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+
+      final saved = await file.read() as Map;
+      expect((saved['kept'] as List).length, 200);
+    });
+
+    test('migra da v2 (shared_preferences) e limpa as chaves', () async {
+      SharedPreferences.setMockInitialValues({
+        'v2.kept': ['/a'],
+        'v2.marked': ['/b:/c.mp4:50'], // caminho com ":" no meio
+        'freedBytes': 7,
+      });
+      final store = DecisionStore(JsonFile(File('${dir.path}/d.json')));
+      await store.load();
+
+      expect(store.isDecided('/a'), isTrue);
+      expect(store.marked, {'/b:/c.mp4': 50});
+      expect(store.freedBytes, 7);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getKeys(), isEmpty);
+    });
+  });
 }
+
