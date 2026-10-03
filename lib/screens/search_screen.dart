@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../format.dart';
@@ -28,6 +30,15 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final _query = TextEditingController();
+
+  /// A busca só roda quando para de digitar; o que já foi aplicado fica aqui.
+  Timer? _debounce;
+  String _appliedQuery = '';
+
+  /// Texto normalizado de cada arquivo, calculado uma vez.
+  late SearchIndex _index = _buildIndex();
+  late List<MediaFile> _results = _index.search();
+
   MediaFilter _filter = MediaFilter.none;
   SearchSort _sort = SearchSort.largest;
 
@@ -40,22 +51,51 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _query.dispose();
     super.dispose();
   }
 
-  List<MediaFile> get _results => searchFiles(
-        _library.files,
-        query: _query.text,
+  SearchIndex _buildIndex() =>
+      SearchIndex(_library.files, roots: _library.roots);
+
+  /// Recalcula o resultado. Se a lista de arquivos mudou (moveu, apagou,
+  /// comprimiu), remonta o índice antes.
+  void _runSearch() {
+    if (!identical(_index.files, _library.files)) _index = _buildIndex();
+    setState(() {
+      _results = _index.search(
+        query: _appliedQuery,
         filter: _filter,
         volume: _volume,
         sort: _sort,
-        roots: _library.roots,
       );
+    });
+  }
+
+  void _onQueryChanged(String text) {
+    _debounce?.cancel();
+    _debounce = Timer(
+      const Duration(milliseconds: 300),
+      () => _applyQuery(text),
+    );
+  }
+
+  void _applyQuery(String text) {
+    _debounce?.cancel();
+    if (text == _appliedQuery) return;
+    _appliedQuery = text;
+    _runSearch();
+  }
+
+  void _setOptions(void Function() change) {
+    change();
+    _runSearch();
+  }
 
   void _toggle(String path) => setState(() {
-        if (!_selected.remove(path)) _selected.add(path);
-      });
+    if (!_selected.remove(path)) _selected.add(path);
+  });
 
   Future<void> _open(MediaFile file) async {
     final decision = await Navigator.of(context).push<SwipeDirection>(
@@ -68,7 +108,9 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       ),
     );
-    if (decision == SwipeDirection.delete) widget.store.markForDeletion(file.path, file.size);
+    if (decision == SwipeDirection.delete) {
+      widget.store.markForDeletion(file.path, file.size);
+    }
     if (decision == SwipeDirection.keep) widget.store.keep(file.path);
   }
 
@@ -77,23 +119,29 @@ class _SearchScreenState extends State<SearchScreen> {
       MaterialPageRoute(
         builder: (_) => SwipeScreen(
           files: results,
-          title: _query.text.trim().isEmpty ? 'Busca' : '"${_query.text.trim()}"',
+          title: _appliedQuery.trim().isEmpty
+              ? 'Busca'
+              : '"${_appliedQuery.trim()}"',
           library: _library,
           store: widget.store,
         ),
       ),
     );
-    if (mounted) setState(() {});
+    if (mounted) _runSearch();
   }
 
-  List<MediaFile> get _selectedFiles => [for (final path in _selected) ?_library.byPath(path)];
+  List<MediaFile> get _selectedFiles => [
+    for (final path in _selected) ?_library.byPath(path),
+  ];
 
   void _markSelected() {
     final files = _selectedFiles;
     for (final f in files) {
       widget.store.markForDeletion(f.path, f.size);
     }
-    _finish('${plural(files.length, 'item marcado', 'itens marcados')} pra apagar · confirma na revisão');
+    _finish(
+      '${plural(files.length, 'item marcado', 'itens marcados')} pra apagar · confirma na revisão',
+    );
   }
 
   void _compressSelected() {
@@ -101,28 +149,39 @@ class _SearchScreenState extends State<SearchScreen> {
     for (final f in videos) {
       widget.store.markForCompression(f.path, f.size);
     }
-    _finish(videos.isEmpty
-        ? 'Nenhum vídeo na seleção'
-        : '${plural(videos.length, 'vídeo', 'vídeos')} na fila de compressão');
+    _finish(
+      videos.isEmpty
+          ? 'Nenhum vídeo na seleção'
+          : '${plural(videos.length, 'vídeo', 'vídeos')} na fila de compressão',
+    );
   }
 
   Future<void> _moveSelected() async {
-    final moved = await moveToCard(context, _library, widget.store, _selectedFiles);
+    final moved = await moveToCard(
+      context,
+      _library,
+      widget.store,
+      _selectedFiles,
+    );
     if (!mounted) return;
-    setState(() => _selected.removeAll(moved));
+    _selected.removeAll(moved);
+    _runSearch(); // os caminhos mudaram
   }
 
   /// Compartilha e mantém a seleção (dá pra mandar pra mais de uma pessoa).
-  void _shareSelected() => _library.native.share([for (final f in _selectedFiles) f.path]);
+  void _shareSelected() =>
+      _library.native.share([for (final f in _selectedFiles) f.path]);
 
   void _finish(String message) {
     setState(_selected.clear);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _pickYear() async {
     final filter = await pickYear(context, _filter, _library.oldestYear);
-    if (filter != null) setState(() => _filter = filter);
+    if (filter != null) _setOptions(() => _filter = filter);
   }
 
   @override
@@ -130,7 +189,9 @@ class _SearchScreenState extends State<SearchScreen> {
     return PopScope(
       canPop: !_selecting,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) setState(_selected.clear); // voltar primeiro limpa a seleção
+        if (!didPop) {
+          setState(_selected.clear); // voltar primeiro limpa a seleção
+        }
       },
       child: Scaffold(
         appBar: _selecting
@@ -142,7 +203,9 @@ class _SearchScreenState extends State<SearchScreen> {
                 title: Text('${_selected.length} selecionados'),
                 actions: [
                   TextButton(
-                    onPressed: () => setState(() => _selected.addAll(_results.map((f) => f.path))),
+                    onPressed: () => setState(
+                      () => _selected.addAll(_results.map((f) => f.path)),
+                    ),
                     child: const Text('Todos'),
                   ),
                 ],
@@ -153,16 +216,27 @@ class _SearchScreenState extends State<SearchScreen> {
                   controller: _query,
                   autofocus: true,
                   textInputAction: TextInputAction.search,
-                  onChanged: (_) => setState(() {}),
+                  onChanged: _onQueryChanged,
+                  onSubmitted: _applyQuery, // Enter busca na hora
                   decoration: InputDecoration(
                     hintText: 'Nome ou pasta (ex.: VID-2024, Camera)',
                     border: InputBorder.none,
-                    suffixIcon: _query.text.isEmpty
-                        ? null
-                        : IconButton(
-                            onPressed: () => setState(_query.clear),
-                            icon: const Icon(Icons.close_rounded, color: AppColors.muted),
-                          ),
+                    // Só o X reage à digitação; a tela não é redesenhada a cada tecla.
+                    suffixIcon: ValueListenableBuilder(
+                      valueListenable: _query,
+                      builder: (context, value, _) => value.text.isEmpty
+                          ? const SizedBox.shrink()
+                          : IconButton(
+                              onPressed: () {
+                                _query.clear();
+                                _applyQuery('');
+                              },
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: AppColors.muted,
+                              ),
+                            ),
+                    ),
                   ),
                 ),
               ),
@@ -177,7 +251,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                   child: FilterBar(
                     filter: _filter,
-                    onChanged: (f) => setState(() => _filter = f),
+                    onChanged: (f) => _setOptions(() => _filter = f),
                     onPickYear: _pickYear,
                   ),
                 ),
@@ -193,18 +267,32 @@ class _SearchScreenState extends State<SearchScreen> {
                         (SearchSort.newest, 'Mais recentes'),
                         (SearchSort.oldest, 'Mais antigos'),
                       ])
-                        _SmallChip(label: label, selected: _sort == sort, onTap: () => setState(() => _sort = sort)),
+                        _SmallChip(
+                          label: label,
+                          selected: _sort == sort,
+                          onTap: () => _setOptions(() => _sort = sort),
+                        ),
                       if (hasCard(_library)) ...[
                         const SizedBox(width: 10),
-                        _SmallChip(label: 'Celular', selected: _volume == _library.root, onTap: () {
-                          setState(() => _volume = _volume == _library.root ? null : _library.root);
-                        }),
+                        _SmallChip(
+                          label: 'Celular',
+                          selected: _volume == _library.root,
+                          onTap: () {
+                            _setOptions(
+                              () => _volume = _volume == _library.root
+                                  ? null
+                                  : _library.root,
+                            );
+                          },
+                        ),
                         _SmallChip(
                           label: 'Cartão',
                           selected: _volume != null && _volume != _library.root,
                           onTap: () {
                             final card = _library.roots.skip(1).first;
-                            setState(() => _volume = _volume == card ? null : card);
+                            _setOptions(
+                              () => _volume = _volume == card ? null : card,
+                            );
                           },
                         ),
                       ],
@@ -233,7 +321,13 @@ class _SearchScreenState extends State<SearchScreen> {
                 Expanded(
                   child: results.isEmpty
                       ? const Center(
-                          child: Text('Nada encontrado', style: TextStyle(color: AppColors.muted, fontSize: 16)),
+                          child: Text(
+                            'Nada encontrado',
+                            style: TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 16,
+                            ),
+                          ),
                         )
                       : ListView.builder(
                           padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
@@ -246,7 +340,8 @@ class _SearchScreenState extends State<SearchScreen> {
                               library: _library,
                               status: _statusOf(file),
                               selected: _selected.contains(file.path),
-                              onTap: () => _selecting ? _toggle(file.path) : _open(file),
+                              onTap: () =>
+                                  _selecting ? _toggle(file.path) : _open(file),
                               onLongPress: () => _toggle(file.path),
                             );
                           },
@@ -299,9 +394,15 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Etiqueta do que já foi decidido sobre o arquivo.
   ({String label, Color color})? _statusOf(MediaFile file) {
     final store = widget.store;
-    if (store.marked.containsKey(file.path)) return (label: 'marcado', color: AppColors.delete);
-    if (store.toCompress.containsKey(file.path)) return (label: 'comprimir', color: AppColors.accent);
-    if (store.kept.contains(file.path)) return (label: 'mantido', color: AppColors.keep);
+    if (store.marked.containsKey(file.path)) {
+      return (label: 'marcado', color: AppColors.delete);
+    }
+    if (store.toCompress.containsKey(file.path)) {
+      return (label: 'comprimir', color: AppColors.accent);
+    }
+    if (store.kept.contains(file.path)) {
+      return (label: 'mantido', color: AppColors.keep);
+    }
     return null;
   }
 }
@@ -328,7 +429,9 @@ class _ResultRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final status = this.status;
     return Material(
-      color: selected ? AppColors.accent.withValues(alpha: 0.16) : Colors.transparent,
+      color: selected
+          ? AppColors.accent.withValues(alpha: 0.16)
+          : Colors.transparent,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -345,7 +448,11 @@ class _ResultRow extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      MediaThumb(path: file.path, isVideo: file.isVideo, thumbnails: library.thumbnails),
+                      MediaThumb(
+                        path: file.path,
+                        isVideo: file.isVideo,
+                        thumbnails: library.thumbnails,
+                      ),
                       if (file.isVideo)
                         const Positioned(
                           right: 3,
@@ -353,13 +460,20 @@ class _ResultRow extends StatelessWidget {
                           child: Icon(
                             Icons.play_arrow_rounded,
                             size: 16,
-                            shadows: [Shadow(color: Colors.black87, blurRadius: 4)],
+                            shadows: [
+                              Shadow(color: Colors.black87, blurRadius: 4),
+                            ],
                           ),
                         ),
                       if (selected)
                         const ColoredBox(
                           color: Colors.black45,
-                          child: Center(child: Icon(Icons.check_circle_rounded, color: AppColors.accent)),
+                          child: Center(
+                            child: Icon(
+                              Icons.check_circle_rounded,
+                              color: AppColors.accent,
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -370,26 +484,40 @@ class _ResultRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(
+                      file.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       '${library.isRemovable(file.path) ? 'SD · ' : ''}${file.folderName} · ${formatDate(file.modified)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: AppColors.muted, fontSize: 12),
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 12,
+                      ),
                     ),
                     if (status != null) ...[
                       const SizedBox(height: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: status.color.withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(5),
                         ),
                         child: Text(
                           status.label,
-                          style: TextStyle(color: status.color, fontSize: 10, fontWeight: FontWeight.w700),
+                          style: TextStyle(
+                            color: status.color,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ],
@@ -407,7 +535,11 @@ class _ResultRow extends StatelessWidget {
 }
 
 class _SmallChip extends StatelessWidget {
-  const _SmallChip({required this.label, required this.selected, required this.onTap});
+  const _SmallChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final bool selected;
@@ -423,9 +555,13 @@ class _SmallChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: selected ? AppColors.accent.withValues(alpha: 0.2) : Colors.transparent,
+            color: selected
+                ? AppColors.accent.withValues(alpha: 0.2)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(99),
-            border: Border.all(color: selected ? AppColors.accent : AppColors.line),
+            border: Border.all(
+              color: selected ? AppColors.accent : AppColors.line,
+            ),
           ),
           child: Text(
             label,
@@ -471,7 +607,14 @@ class _BulkAction extends StatelessWidget {
                 children: [
                   Icon(icon, color: color, size: 22),
                   const SizedBox(height: 4),
-                  Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 12)),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
             ),

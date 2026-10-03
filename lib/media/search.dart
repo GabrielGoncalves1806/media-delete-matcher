@@ -15,6 +15,7 @@ const _accents = {
 /// Minúsculo e sem acento: "Câmera" e "camera" batem.
 String normalize(String text) {
   final lower = text.toLowerCase();
+  if (!lower.codeUnits.any((c) => c > 127)) return lower; // sem acento: caminho rápido
   final out = StringBuffer();
   for (final rune in lower.runes) {
     final char = String.fromCharCode(rune);
@@ -23,8 +24,54 @@ String normalize(String text) {
   return out.toString();
 }
 
-/// Busca por nome ou pasta. Cada palavra de [query] tem que aparecer em algum
-/// lugar do caminho (depois de [root], pra raiz do volume não entrar na conta).
+/// Índice de busca: o texto normalizado de cada arquivo é calculado uma vez,
+/// não a cada tecla. Normalizar ~11 mil caminhos por busca deixava a
+/// digitação lenta.
+class SearchIndex {
+  SearchIndex(this.files, {List<String> roots = const []})
+      : _texts = [for (final f in files) normalize(_relative(f.path, roots))];
+
+  final List<MediaFile> files;
+  final List<String> _texts;
+
+  /// Caminho sem a raiz do volume ("storage", "emulated" e o id do cartão
+  /// estão em tudo e não devem bater na busca).
+  static String _relative(String path, List<String> roots) {
+    for (final root in roots) {
+      if (path.startsWith('$root/')) return path.substring(root.length + 1);
+    }
+    return path;
+  }
+
+  /// Cada palavra de [query] tem que aparecer em algum lugar do caminho.
+  List<MediaFile> search({
+    String query = '',
+    MediaFilter filter = MediaFilter.none,
+    String? volume,
+    SearchSort sort = SearchSort.largest,
+  }) {
+    final words = normalize(query).split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    final result = <MediaFile>[];
+    for (var i = 0; i < files.length; i++) {
+      final f = files[i];
+      if (volume != null && !f.path.startsWith('$volume/')) continue;
+      if (!filter.matches(f)) continue;
+      if (words.isNotEmpty && !words.every(_texts[i].contains)) continue;
+      result.add(f);
+    }
+    switch (sort) {
+      case SearchSort.largest:
+        result.sort((a, b) => b.size.compareTo(a.size));
+      case SearchSort.newest:
+        result.sort((a, b) => b.modified.compareTo(a.modified));
+      case SearchSort.oldest:
+        result.sort((a, b) => a.modified.compareTo(b.modified));
+    }
+    return result;
+  }
+}
+
+/// Atalho pra uma busca só (monta o índice e busca).
 List<MediaFile> searchFiles(
   List<MediaFile> files, {
   String query = '',
@@ -32,35 +79,5 @@ List<MediaFile> searchFiles(
   String? volume,
   SearchSort sort = SearchSort.largest,
   List<String> roots = const [],
-}) {
-  final words = normalize(query).split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-
-  String searchable(MediaFile f) {
-    var path = f.path;
-    for (final root in roots) {
-      if (path.startsWith('$root/')) {
-        path = path.substring(root.length + 1);
-        break;
-      }
-    }
-    return normalize(path);
-  }
-
-  final result = files.where((f) {
-    if (volume != null && !f.path.startsWith('$volume/')) return false;
-    if (!filter.matches(f)) return false;
-    if (words.isEmpty) return true;
-    final text = searchable(f);
-    return words.every(text.contains);
-  }).toList();
-
-  switch (sort) {
-    case SearchSort.largest:
-      result.sort((a, b) => b.size.compareTo(a.size));
-    case SearchSort.newest:
-      result.sort((a, b) => b.modified.compareTo(a.modified));
-    case SearchSort.oldest:
-      result.sort((a, b) => a.modified.compareTo(b.modified));
-  }
-  return result;
-}
+}) =>
+    SearchIndex(files, roots: roots).search(query: query, filter: filter, volume: volume, sort: sort);
