@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'media/decision_store.dart';
@@ -11,6 +12,8 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Sempre em retrato (o manifest já trava; isso garante no Flutter também).
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   final dataDir = (await getApplicationSupportDirectory()).path;
   final store = DecisionStore(JsonFile(File('$dataDir/decisions.json')));
   await store.load();
