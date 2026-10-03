@@ -20,7 +20,9 @@ O celular encheu e a galeria não ajuda: mostra tudo misturado, do mais novo pro
 - **Duplicados exatos**: acha o mesmo arquivo salvo mais de uma vez, byte a byte, e deixa ficar com uma cópia de cada
 - **Painel de armazenamento**: quanto o celular tem e pra onde foi cada GB (WhatsApp, câmera, outras mídias, outros arquivos, apps e dados, sistema)
 - **Mantidos**: rever o que foi mantido e voltar atrás
-- **Cartão SD**: entra na varredura junto com o armazenamento interno, com painel próprio e selo "SD" nas pastas
+- **Cartão SD**: tela própria com o conteúdo do cartão, separado do celular
+- **Mover pro cartão**: tira do celular sem apagar. Copia, confere a cópia (SHA-1) e só então apaga o original; dá pra navegar e criar pastas no cartão
+- **Busca**: por nome ou pasta (sem ligar pra acento), com filtros e ordem; segurar seleciona pra apagar, mover ou comprimir em lote, e dá pra fazer o swipe só nos resultados
 
 ## Como funciona por dentro
 

@@ -12,6 +12,7 @@ import 'compress_screen.dart';
 import 'duplicates_screen.dart';
 import 'kept_screen.dart';
 import 'review_screen.dart';
+import 'search_screen.dart';
 import 'swipe_screen.dart';
 import 'trash_screen.dart';
 import 'volume_screen.dart';
@@ -186,7 +187,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          _Header(onRefresh: _rescan, updating: _updating),
+          _Header(
+            onRefresh: _rescan,
+            updating: _updating,
+            onSearch: () => _push(SearchScreen(library: _library, store: widget.store)),
+          ),
           const SizedBox(height: 16),
           if (_storage != null) _StorageCard(storage: _storage!, library: _library),
           for (final volume in _library.volumes.where((v) => v.removable))
@@ -268,10 +273,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onRefresh, required this.updating});
+  const _Header({required this.onRefresh, required this.updating, required this.onSearch});
 
   final VoidCallback onRefresh;
   final bool updating;
+  final VoidCallback onSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -290,6 +296,13 @@ class _Header extends StatelessWidget {
             ],
           ),
         ),
+        IconButton.filledTonal(
+          style: IconButton.styleFrom(backgroundColor: AppColors.surface),
+          onPressed: onSearch,
+          icon: const Icon(Icons.search_rounded, color: AppColors.text),
+          tooltip: 'Buscar',
+        ),
+        const SizedBox(width: 6),
         if (updating)
           const Padding(
             padding: EdgeInsets.all(12),
