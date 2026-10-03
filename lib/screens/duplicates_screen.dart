@@ -58,15 +58,16 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
     if (mounted) setState(() => _groups = groups);
   }
 
-  int get _wasted => _groups!.fold(0, (sum, g) => sum + g.wastedBytes);
-  int get _copyCount => _groups!.fold(0, (sum, g) => sum + g.items.length - 1);
+  int get _toFree => _groups!.fold(0, (sum, g) => sum + g.bytesToFree);
+  int get _copyCount => _groups!.fold(0, (sum, g) => sum + g.copies.length);
 
   Future<void> _markAllAndReview() async {
     for (final group in _groups!) {
       for (final copy in group.copies) {
         widget.store.markForDeletion(copy.path, copy.size);
       }
-      widget.store.keep(group.keeperPath);
+      final keeper = group.keeperPath;
+      if (keeper != null) widget.store.keep(keeper);
     }
     final trashed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -103,15 +104,16 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
                                 TextSpan(
                                   children: [
                                     TextSpan(
-                                      text: '${plural(_copyCount, 'cópia', 'cópias')} · ${formatBytes(_wasted)}',
+                                      text: '${plural(_copyCount, 'arquivo', 'arquivos')} · ${formatBytes(_toFree)}',
                                       style: const TextStyle(
                                         color: AppColors.delete,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
                                     TextSpan(
-                                      text: ' em ${plural(groups.length, 'grupo', 'grupos')}. '
-                                          'A verde fica; toca em outra pra trocar.',
+                                      text: ' pra sair, em ${plural(groups.length, 'grupo', 'grupos')}. '
+                                          'A verde fica; toca em outra pra trocar, ou em "Apagar todas" '
+                                          'pra não ficar nenhuma.',
                                     ),
                                   ],
                                 ),
@@ -124,6 +126,9 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
                             group: group,
                             library: widget.library,
                             onPickKeeper: (path) => setState(() => group.keeperPath = path),
+                            onToggleDeleteAll: () => setState(() {
+                              group.keeperPath = group.deleteAll ? chooseKeeper(group.items).path : null;
+                            }),
                           );
                         },
                       ),
@@ -143,7 +148,7 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
                             ),
                             onPressed: _markAllAndReview,
                             child: Text(
-                              'Manter 1 de cada · revisar ${plural(_copyCount, 'cópia', 'cópias')}',
+                              'Revisar ${plural(_copyCount, 'arquivo', 'arquivos')} · ${formatBytes(_toFree)}',
                               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                             ),
                           ),
@@ -207,11 +212,19 @@ class _Progress extends StatelessWidget {
 }
 
 class _GroupCard extends StatelessWidget {
-  const _GroupCard({required this.group, required this.library, required this.onPickKeeper});
+  const _GroupCard({
+    required this.group,
+    required this.library,
+    required this.onPickKeeper,
+    required this.onToggleDeleteAll,
+  });
 
   final DuplicateGroup group;
   final MediaLibrary library;
+
+  /// Tocar numa cópia faz ela ser a que fica (e sai do "apagar todas").
   final ValueChanged<String> onPickKeeper;
+  final VoidCallback onToggleDeleteAll;
 
   @override
   Widget build(BuildContext context) {
@@ -219,18 +232,39 @@ class _GroupCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: group.deleteAll ? AppColors.delete.withValues(alpha: 0.08) : AppColors.surface,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: group.deleteAll ? AppColors.delete.withValues(alpha: 0.5) : Colors.transparent),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            '${group.items.length}× ${formatBytes(group.bytesEach)}'
-            '  ·  ${formatBytes(group.wastedBytes)} sobrando',
-            style: const TextStyle(fontWeight: FontWeight.w700),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  group.deleteAll
+                      ? '${group.items.length}× ${formatBytes(group.bytesEach)}  ·  todas saem'
+                      : '${group.items.length}× ${formatBytes(group.bytesEach)}'
+                          '  ·  ${formatBytes(group.wastedBytes)} sobrando',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: group.deleteAll ? AppColors.delete : AppColors.text,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onToggleDeleteAll,
+                style: TextButton.styleFrom(
+                  foregroundColor: group.deleteAll ? AppColors.text : AppColors.delete,
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: Icon(group.deleteAll ? Icons.undo_rounded : Icons.delete_sweep_rounded, size: 18),
+                label: Text(group.deleteAll ? 'Manter uma' : 'Apagar todas'),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           SizedBox(
             height: 132,
             child: ListView.separated(

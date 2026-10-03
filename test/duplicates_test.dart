@@ -96,5 +96,17 @@ void main() {
       expect(group.wastedBytes, 20);
       expect(group.copies.length, 2);
     });
+
+    test('apagar todas: nenhuma fica', () {
+      final group = DuplicateGroup([media('/a'), media('/b')]);
+      expect(group.deleteAll, isFalse);
+      expect(group.bytesToFree, 10);
+
+      group.keeperPath = null;
+      expect(group.deleteAll, isTrue);
+      expect(group.copies.map((f) => f.path), ['/a', '/b']);
+      expect(group.bytesToFree, 20);
+      expect(group.wastedBytes, 10); // a ordem dos grupos não muda
+    });
   });
 }

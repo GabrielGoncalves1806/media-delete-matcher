@@ -15,11 +15,20 @@ class DuplicateGroup {
   final List<MediaFile> items;
 
   /// Qual cópia fica. O resto pode ir pra lixeira.
-  String keeperPath;
+  /// Null = nenhuma fica (as duas eram lixo, tipo o mesmo meme em dois grupos).
+  String? keeperPath;
 
+  bool get deleteAll => keeperPath == null;
   int get bytesEach => items.first.size;
+
+  /// O que vai pra lixeira: todas menos a que fica (ou todas).
   Iterable<MediaFile> get copies => items.where((f) => f.path != keeperPath);
+
+  /// Quanto a duplicação desperdiça (fixo, pra ordenar os grupos).
   int get wastedBytes => bytesEach * (items.length - 1);
+
+  /// Quanto sai de fato com a escolha atual.
+  int get bytesToFree => bytesEach * copies.length;
 }
 
 /// Prefere a cópia da câmera (DCIM) e, empatando, a mais antiga:
