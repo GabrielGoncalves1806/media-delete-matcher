@@ -15,10 +15,11 @@ import '../widgets/swipe_card.dart';
 /// toque), vídeo com som, pausa e barra de progresso arrastável.
 /// Devolve a decisão (ou null se só fechou).
 class ViewerScreen extends StatefulWidget {
-  const ViewerScreen({super.key, required this.file, required this.thumbnails});
+  const ViewerScreen({super.key, required this.file, required this.thumbnails, this.onShare});
 
   final MediaFile file;
   final Thumbnails thumbnails;
+  final VoidCallback? onShare;
 
   @override
   State<ViewerScreen> createState() => _ViewerScreenState();
@@ -129,6 +130,12 @@ class _ViewerScreenState extends State<ViewerScreen> {
                         ),
                       ),
                       Text(formatBytes(file.size), style: display(18)),
+                      if (widget.onShare != null)
+                        IconButton(
+                          onPressed: widget.onShare,
+                          icon: const Icon(Icons.share_rounded),
+                          tooltip: 'Compartilhar',
+                        ),
                     ],
                   ),
                 ),

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- O que o FileProvider pode emprestar pra outros apps ao compartilhar.
+     external-path: armazenamento interno. root-path: cartão SD (/storage/XXXX-XXXX). -->
+<paths>
+    <external-path name="internal" path="." />
+    <root-path name="root" path="/storage" />
+</paths>

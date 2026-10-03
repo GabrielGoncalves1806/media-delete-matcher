@@ -1,6 +1,7 @@
 package dev.gabrieloliveira.media_swipe
 
 import android.app.usage.StorageStatsManager
+import android.content.ClipData
 import android.content.Intent
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
@@ -14,6 +15,7 @@ import android.os.StatFs
 import android.os.storage.StorageManager
 import android.provider.Settings
 import android.util.Size
+import androidx.core.content.FileProvider
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.effect.Presentation
@@ -37,6 +39,8 @@ import java.util.concurrent.Executors
  * O que o Dart não faz sozinho: permissão de "acesso a todos os arquivos",
  * miniaturas, espaço livre e avisar a galeria quando um arquivo sai do lugar.
  */
+private val VIDEO_EXTENSIONS = setOf("mp4", "mkv", "mov", "3gp", "webm", "avi", "m4v")
+
 class MainActivity : FlutterActivity() {
     private val worker = Executors.newFixedThreadPool(3)
     private val main = Handler(Looper.getMainLooper())
@@ -120,6 +124,11 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
 
+                    "share" -> {
+                        share(call.argument<List<String>>("paths")!!)
+                        result.success(null)
+                    }
+
                     "scanFiles" -> {
                         val paths = call.argument<List<String>>("paths")!!
                         if (paths.isNotEmpty()) {
@@ -179,6 +188,32 @@ class MainActivity : FlutterActivity() {
                     "free" to free,
                 )
             }
+    }
+
+    /**
+     * Abre o "compartilhar" do Android com os arquivos. Não copia nada: o
+     * FileProvider dá ao app escolhido acesso de leitura ao arquivo original.
+     */
+    private fun share(paths: List<String>) {
+        val uris = ArrayList(paths.map { FileProvider.getUriForFile(this, "$packageName.files", File(it)) })
+        val videos = paths.count { it.substringAfterLast('.').lowercase() in VIDEO_EXTENSIONS }
+        val mime = when (videos) {
+            0 -> "image/*"
+            paths.size -> "video/*"
+            else -> "*/*"
+        }
+        val intent = if (uris.size == 1) {
+            Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris.first())
+        } else {
+            Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+        }
+        intent.type = mime
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // ClipData faz a permissão de leitura valer pra todos os arquivos.
+        intent.clipData = ClipData.newRawUri("arquivos", uris.first()).apply {
+            uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+        }
+        startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
     }
 
     /** Largura e altura já como aparecem na tela (rotação aplicada). */

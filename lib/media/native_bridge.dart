@@ -98,6 +98,10 @@ class NativeBridge {
 
   Future<void> cancelCompression() => _channel.invokeMethod('cancelCompress');
 
+  /// Abre o "compartilhar" do Android (WhatsApp, Telegram...). Não copia os
+  /// arquivos: o app escolhido lê direto do lugar onde estão.
+  Future<void> share(List<String> paths) => _channel.invokeMethod('share', {'paths': paths});
+
   /// Avisa o MediaStore que esses caminhos mudaram (sumiram ou voltaram),
   /// pra galeria não ficar mostrando fantasma.
   Future<void> scanFiles(List<String> paths) =>

@@ -47,7 +47,11 @@ class _SwipeScreenState extends State<SwipeScreen> {
     final decision = await Navigator.of(context).push<SwipeDirection>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => ViewerScreen(file: file, thumbnails: widget.library.thumbnails),
+        builder: (_) => ViewerScreen(
+          file: file,
+          thumbnails: widget.library.thumbnails,
+          onShare: () => widget.library.native.share([file.path]),
+        ),
       ),
     );
     if (decision != null) await _cardKey.currentState?.swipe(decision);
@@ -163,6 +167,7 @@ class _SwipeScreenState extends State<SwipeScreen> {
               onMove: current != null && hasCard(widget.library) && !widget.library.isRemovable(current.path)
                   ? _moveCurrent
                   : null,
+              onShare: current == null ? null : () => widget.library.native.share([current.path]),
             ),
             Expanded(
               child: Padding(
@@ -245,6 +250,7 @@ class _TopBar extends StatelessWidget {
     required this.store,
     required this.onReview,
     required this.onMove,
+    required this.onShare,
   });
 
   final String title;
@@ -254,6 +260,7 @@ class _TopBar extends StatelessWidget {
 
   /// Null esconde o botão (sem cartão, ou o arquivo já tá nele).
   final VoidCallback? onMove;
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -277,6 +284,12 @@ class _TopBar extends StatelessWidget {
               ],
             ),
           ),
+          if (onShare != null)
+            IconButton(
+              onPressed: onShare,
+              icon: const Icon(Icons.share_rounded, color: AppColors.muted, size: 20),
+              tooltip: 'Compartilhar',
+            ),
           if (onMove != null)
             Padding(
               padding: const EdgeInsets.only(right: 8),

@@ -61,7 +61,11 @@ class _SearchScreenState extends State<SearchScreen> {
     final decision = await Navigator.of(context).push<SwipeDirection>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => ViewerScreen(file: file, thumbnails: _library.thumbnails),
+        builder: (_) => ViewerScreen(
+          file: file,
+          thumbnails: _library.thumbnails,
+          onShare: () => _library.native.share([file.path]),
+        ),
       ),
     );
     if (decision == SwipeDirection.delete) widget.store.markForDeletion(file.path, file.size);
@@ -107,6 +111,9 @@ class _SearchScreenState extends State<SearchScreen> {
     if (!mounted) return;
     setState(() => _selected.removeAll(moved));
   }
+
+  /// Compartilha e mantém a seleção (dá pra mandar pra mais de uma pessoa).
+  void _shareSelected() => _library.native.share([for (final f in _selectedFiles) f.path]);
 
   void _finish(String message) {
     setState(_selected.clear);
@@ -252,6 +259,12 @@ class _SearchScreenState extends State<SearchScreen> {
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                       child: Row(
                         children: [
+                          _BulkAction(
+                            icon: Icons.share_rounded,
+                            label: 'Enviar',
+                            color: AppColors.sky,
+                            onTap: _shareSelected,
+                          ),
                           _BulkAction(
                             icon: Icons.delete_outline_rounded,
                             label: 'Apagar',
