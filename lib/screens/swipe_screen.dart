@@ -8,6 +8,7 @@ import '../media/media_library.dart';
 import '../theme.dart';
 import '../widgets/media_preview.dart';
 import '../widgets/swipe_card.dart';
+import 'move_flow.dart';
 import 'review_screen.dart';
 import 'viewer_screen.dart';
 
@@ -100,6 +101,20 @@ class _SwipeScreenState extends State<SwipeScreen> {
     Navigator.of(context).pop();
   }
 
+  /// Manda a carta de cima pro cartão SD (fica mantida lá).
+  Future<void> _moveCurrent() async {
+    final file = _current;
+    if (file == null) return;
+    final moved = await moveToCard(context, widget.library, widget.store, [file]);
+    if (moved.isEmpty || !mounted) return;
+    setState(() {
+      _queue.removeWhere((f) => moved.contains(f.path));
+      _history.removeWhere((f) => moved.contains(f.path)); // não dá pra desfazer
+      _cardKey = GlobalKey();
+    });
+    _leaveIfDone();
+  }
+
   void _undo() {
     if (_history.isEmpty) return;
     final last = _history.removeLast();
@@ -145,6 +160,9 @@ class _SwipeScreenState extends State<SwipeScreen> {
               remaining: _queue.length,
               store: widget.store,
               onReview: _openReview,
+              onMove: current != null && hasCard(widget.library) && !widget.library.isRemovable(current.path)
+                  ? _moveCurrent
+                  : null,
             ),
             Expanded(
               child: Padding(
@@ -226,12 +244,16 @@ class _TopBar extends StatelessWidget {
     required this.remaining,
     required this.store,
     required this.onReview,
+    required this.onMove,
   });
 
   final String title;
   final int remaining;
   final DecisionStore store;
   final VoidCallback onReview;
+
+  /// Null esconde o botão (sem cartão, ou o arquivo já tá nele).
+  final VoidCallback? onMove;
 
   @override
   Widget build(BuildContext context) {
@@ -255,6 +277,16 @@ class _TopBar extends StatelessWidget {
               ],
             ),
           ),
+          if (onMove != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: IconButton.filledTonal(
+                style: IconButton.styleFrom(backgroundColor: AppColors.warn.withValues(alpha: 0.14)),
+                onPressed: onMove,
+                icon: const Icon(Icons.sd_card_rounded, color: AppColors.warn, size: 20),
+                tooltip: 'Mover pro cartão',
+              ),
+            ),
           ListenableBuilder(
             listenable: store,
             builder: (context, _) => GestureDetector(
