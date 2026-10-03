@@ -297,6 +297,13 @@
     .phone { border-radius: 36px; height: 620px; }
     .screen { border-radius: 28px; }
   }
+  /* ?shot=N: só o celular N do fluxo, pra gerar imagem do README */
+  body.shot .page > :not(.flow), body.shot .screen-label { display: none; }
+  body.shot .page { padding: 0; }
+  body.shot .flow { display: block; }
+  body.shot .screen-wrap { display: none; }
+  body.shot .screen-wrap.shown { display: block; }
+  body.shot .phone { box-shadow: none; }
 </style>
 </head>
 <body>
@@ -692,6 +699,12 @@
 
   renderDeck();
   renderTotals();
+
+  const shot = new URLSearchParams(location.search).get('shot');
+  if (shot) {
+    document.body.classList.add('shot');
+    document.querySelectorAll('.screen-wrap')[+shot - 1]?.classList.add('shown');
+  }
 </script>
 </body>
 </html>

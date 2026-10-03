@@ -112,6 +112,13 @@
   .rules li { font-size: 14px; margin: 0 0 8px 18px; }
   .rules li b { color: var(--text); }
   .rules li { color: var(--muted); }
+  /* ?shot: só o celular, pra gerar imagem do README */
+  body.shot .hero, body.shot .stage > div:last-child { display: none; }
+  body.shot .page { padding: 0; }
+  /* renderizado com 500px de largura (o Chrome headless não vai abaixo disso) e recortado no centro */
+  body.shot .stage { display: block !important; }
+  body.shot .phone { margin: 0 auto; }
+  body.shot .phone { box-shadow: none; }
 </style>
 </head>
 <body>
@@ -303,7 +310,8 @@
   // ---- passo 2: carta arrastável ----
   const deck = document.getElementById('deck');
   const art = h => `radial-gradient(circle at 25% 20%, hsl(${h} 85% 62%), transparent 55%), radial-gradient(circle at 80% 75%, hsl(${h + 40} 80% 50%), transparent 60%), linear-gradient(160deg, hsl(${h} 50% 20%), hsl(${h + 40} 55% 12%))`;
-  const CARDS = [{ size: '144 MB', video: true, h: 350 }, { size: '96 MB', video: true, h: 200 }, { size: '9 MB', video: false, h: 30 }, { size: '61 MB', video: true, h: 140 }];
+  // a primeira carta é escura, igual no app: o carimbo vermelho sumia numa carta vermelha
+  const CARDS = [{ size: '144 MB', video: true, h: 240, dark: true }, { size: '96 MB', video: true, h: 200 }, { size: '9 MB', video: false, h: 30 }, { size: '61 MB', video: true, h: 140 }];
   let ci = 0;
   const toast = document.createElement('div');
   toast.className = 'toast';
@@ -311,7 +319,7 @@
 
   function cardHTML(c, back) {
     return `<div class="card ${back ? 'back' : ''}">
-      <div class="art-bg" style="background:${art(c.h)}"></div>
+      <div class="art-bg" style="background:${c.dark ? 'linear-gradient(160deg, #34344a, #16161f)' : art(c.h)}"></div>
       <span class="kind">${c.video ? '▶ VÍDEO' : 'FOTO'}</span>
       <span class="size">${c.size}</span>
       ${c.video ? '<div class="play">▶</div>' : ''}
@@ -416,6 +424,7 @@
   }
 
   renderDeck();
+  if (location.search.includes('shot')) document.body.classList.add('shot');
   // onboarding.html#2 abre direto no passo 2
   go((parseInt(location.hash.slice(1), 10) || 1) - 1);
 </script>

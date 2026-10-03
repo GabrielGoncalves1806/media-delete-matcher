@@ -1,64 +1,192 @@
-<img src="docs/icon.png" width="96" alt="Ícone do app" align="right">
+<div align="center">
 
-# media-delete-matcher
+<img src="docs/icon.png" width="112" alt="Ícone do Media Swipe">
 
-Um "Tinder de mídias" pra Android: passa pelas fotos e vídeos do celular **do maior pro menor**, decide no swipe e só apaga no final, numa confirmação só.
+<h1>Media Swipe</h1>
 
-**← apaga · → mantém · ↑ comprime**
+<p><b>Um "Tinder de mídias" pra Android.</b><br>
+Passa pelas fotos e vídeos do celular <b>do maior pro menor</b>, decide no swipe<br>
+e só apaga no final, numa confirmação só.</p>
 
-![Protótipo do design](docs/design.png)
-<sub>Protótipo inicial (`design.html`, com dados fictícios). O app evoluiu a partir dele.</sub>
+<p>
+<img src="https://img.shields.io/badge/Flutter-3.38-02569B?logo=flutter&logoColor=white" alt="Flutter 3.38">
+<img src="https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white" alt="Android 11+">
+<img src="https://img.shields.io/badge/testes-64-2FD47A" alt="64 testes">
+<img src="https://img.shields.io/badge/licença-MIT-7C6CFF" alt="Licença MIT">
+</p>
+
+<p>
+<kbd>←</kbd> apaga &nbsp;·&nbsp; <kbd>→</kbd> mantém &nbsp;·&nbsp; <kbd>↑</kbd> comprime
+</p>
+
+</div>
+
+<br>
+
+<table align="center">
+  <tr>
+    <td align="center"><img src="docs/readme/swipe.png" width="200" alt="Swipe"><br><sub><b>Swipe</b><br>maiores primeiro</sub></td>
+    <td align="center"><img src="docs/readme/revisao.png" width="200" alt="Revisão"><br><sub><b>Revisão</b><br>confirma tudo de uma vez</sub></td>
+    <td align="center"><img src="docs/readme/pronto.png" width="200" alt="Pronto"><br><sub><b>Pronto</b><br>espaço liberado</sub></td>
+  </tr>
+</table>
+
+<table align="center">
+  <tr>
+    <td align="center"><img src="docs/readme/onboarding-1.png" width="160" alt="Onboarding: espaço"><br><sub>O problema</sub></td>
+    <td align="center"><img src="docs/readme/onboarding-2.png" width="160" alt="Onboarding: swipe"><br><sub>Como funciona</sub></td>
+    <td align="center"><img src="docs/readme/onboarding-3.png" width="160" alt="Onboarding: segurança"><br><sub>Nada some sem confirmar</sub></td>
+    <td align="center"><img src="docs/readme/onboarding-5.png" width="160" alt="Onboarding: permissão"><br><sub>A permissão, explicada</sub></td>
+  </tr>
+</table>
+
+<p align="center"><sub>Imagens dos protótipos em HTML do repositório (<a href="design.html"><code>design.html</code></a> e <a href="onboarding.html"><code>onboarding.html</code></a>), com dados fictícios.</sub></p>
+
+---
 
 ## Por que existe
 
-O celular encheu e a galeria não ajuda: mostra tudo misturado, do mais novo pro mais velho, e **esconde a mídia do WhatsApp** quando a "visibilidade de mídia" tá desligada, justo onde costuma estar a maior parte do espaço. Aqui a ordem é por tamanho, então os primeiros swipes são os que mais liberam espaço.
+O celular encheu e a galeria não ajuda: mostra tudo misturado, do mais novo pro mais velho, e **esconde a mídia do WhatsApp** quando a "visibilidade de mídia" tá desligada, justo onde costuma estar a maior parte do espaço.
 
-## O que faz
+O Media Swipe inverte a lógica: **ordena por tamanho**. Os primeiros swipes são os que mais liberam espaço, e decidir sobre um vídeo de 144 MB leva o mesmo segundo que decidir sobre uma foto de 200 KB.
 
-- **Swipe do maior pro menor**: vídeo toca mudo em loop (toque liga o som), a próxima carta já vem carregada e segurar abre em tela cheia com zoom
-- **Filtros**: vídeos, fotos, maiores que 50 MB, por ano
-- **Nada some sem confirmar**: tudo passa por uma revisão em grade e vai pra uma **lixeira do app** que guarda por 30 dias, com restaurar e esvaziar
-- **Comprimir em vez de apagar**: swipe pra cima recodifica o vídeo em 720p no próprio celular. Só aparece quando compensa, e o original vai pra lixeira
-- **Duplicados exatos**: acha o mesmo arquivo salvo mais de uma vez, byte a byte, e deixa ficar com uma cópia de cada
-- **Painel de armazenamento**: quanto o celular tem e pra onde foi cada GB (WhatsApp, câmera, outras mídias, outros arquivos, apps e dados, sistema)
-- **Mantidos**: rever o que foi mantido e voltar atrás
-- **Cartão SD**: tela própria com o conteúdo do cartão, separado do celular
-- **Mover pro cartão**: tira do celular sem apagar. Copia, confere a cópia (SHA-1) e só então apaga o original; dá pra navegar e criar pastas no cartão
-- **Busca**: por nome ou pasta (sem ligar pra acento), com filtros e ordem; segurar seleciona pra apagar, mover ou comprimir em lote, e dá pra fazer o swipe só nos resultados
+No celular onde ele nasceu, a faxina foi de **847 MB livres pra 13 GB**.
+
+## Como se usa
+
+<table>
+  <tr>
+    <td width="40" align="center">1️⃣</td>
+    <td><b>Escolhe por onde começar.</b> "Tudo, maiores primeiro", uma pasta específica, ou um filtro: só vídeos, maiores que 50 MB, de 2023...</td>
+  </tr>
+  <tr>
+    <td align="center">2️⃣</td>
+    <td><b>Swipe.</b> Esquerda marca pra apagar, direita mantém, pra cima manda um vídeo pesado pra fila de compressão. Segurar a carta abre em tela cheia com zoom. Desfazer tá sempre a um toque.</td>
+  </tr>
+  <tr>
+    <td align="center">3️⃣</td>
+    <td><b>Revisão.</b> Tudo que foi marcado aparece numa grade; toca pra desmarcar o que mudou de ideia.</td>
+  </tr>
+  <tr>
+    <td align="center">4️⃣</td>
+    <td><b>Lixeira.</b> O que sai fica 30 dias na lixeira do app, com restaurar. O espaço volta pro celular quando ela é esvaziada.</td>
+  </tr>
+</table>
+
+## O que tem
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h4>🔥 Swipe do maior pro menor</h4>
+      Vídeo toca mudo em loop (toque liga o som), a próxima carta já vem carregada, vibração ao decidir.
+    </td>
+    <td width="50%" valign="top">
+      <h4>📊 Painel de armazenamento</h4>
+      Quanto o celular tem e pra onde foi cada GB: WhatsApp, câmera, outras mídias, outros arquivos, apps e dados, sistema.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>🗜️ Comprimir em vez de apagar</h4>
+      Recodifica em 720p no próprio celular. Só aparece quando compensa; se não ficar bem menor, nada muda.
+    </td>
+    <td valign="top">
+      <h4>⧉ Duplicados exatos</h4>
+      O mesmo arquivo salvo mais de uma vez, byte a byte. Fica uma cópia de cada, ou nenhuma.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>🔍 Busca com ação em lote</h4>
+      Por nome ou pasta, sem ligar pra acento. Seleciona e apaga, move, comprime ou compartilha de uma vez; ou faz o swipe só nos resultados.
+    </td>
+    <td valign="top">
+      <h4>💾 Cartão SD</h4>
+      Tela própria, separada do celular, e <b>mover pro cartão</b>: copia, confere a cópia (SHA-1) e só então apaga o original.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <h4>↗️ Compartilhar</h4>
+      Achou aquela foto? Manda direto, sem copiar o arquivo.
+    </td>
+    <td valign="top">
+      <h4>🔖 Mantidos</h4>
+      Rever o que foi mantido e voltar atrás quando quiser.
+    </td>
+  </tr>
+</table>
 
 ## Como funciona por dentro
 
 Algumas decisões que valem a leitura:
 
-**Lê o sistema de arquivos, não o MediaStore.** O MediaStore marca como "não é mídia" tudo que está numa pasta com `.nomedia`, então a galeria (e qualquer lib baseada nela) não enxerga os vídeos do WhatsApp. O app usa a permissão de acesso a todos os arquivos e varre o armazenamento direto num isolate ([`media_file.dart`](lib/media/media_file.dart)).
+<details open>
+<summary><b>Lê o sistema de arquivos, não o MediaStore</b></summary>
+<br>
+O MediaStore marca como "não é mídia" tudo que está numa pasta com <code>.nomedia</code>, então a galeria (e qualquer lib baseada nela) não enxerga os vídeos do WhatsApp. O app usa a permissão de acesso a todos os arquivos e varre o armazenamento direto num isolate (<a href="lib/media/media_file.dart"><code>media_file.dart</code></a>).
+</details>
 
-**Varredura incremental.** Criar, apagar ou renomear um arquivo muda a data da pasta. O app guarda um retrato de cada pasta e só relista as que mudaram; abre na hora com o cache e atualiza em segundo plano. Pasta mexida há menos de 2 s é sempre relistada, porque a data tem precisão de milissegundo.
+<details>
+<summary><b>Varredura incremental</b></summary>
+<br>
+Criar, apagar ou renomear um arquivo muda a data da pasta. O app guarda um retrato de cada pasta e só relista as que mudaram; abre na hora com o cache e atualiza em segundo plano. Pasta mexida há menos de 2 s é sempre relistada, porque a data tem precisão de milissegundo.
+</details>
 
-**Duplicados num funil.** Ler os 30+ GB inteiros pra comparar seria lento demais. Então: agrupa por tamanho em bytes (grátis) → SHA-1 dos primeiros e últimos 64 KB → SHA-1 completo só de quem sobrou. Os hashes ficam em cache ([`duplicate_finder.dart`](lib/media/duplicate_finder.dart)).
+<details>
+<summary><b>Duplicados num funil</b></summary>
+<br>
+Ler dezenas de GB inteiros pra comparar seria lento demais. Então: agrupa por tamanho em bytes (grátis) → SHA-1 dos primeiros e últimos 64 KB → SHA-1 completo só de quem sobrou. Os hashes ficam em cache (<a href="lib/media/duplicate_finder.dart"><code>duplicate_finder.dart</code></a>).
+</details>
 
-**Compressão sem risco.** Com o [Media3 Transformer](https://developer.android.com/media/media3/transformer) (codec de hardware, sem ffmpeg): recodifica pra um temporário escondido; se não ficou pelo menos 15% menor, descarta; se ficou, o original vai pra lixeira do app e a versão leve assume o lugar com a mesma data ([`video_compressor.dart`](lib/media/video_compressor.dart)).
+<details>
+<summary><b>Compressão sem risco</b></summary>
+<br>
+Com o <a href="https://developer.android.com/media/media3/transformer">Media3 Transformer</a> (codec de hardware, sem ffmpeg): recodifica pra um temporário escondido; se não ficou pelo menos 15% menor, descarta; se ficou, o original vai pra lixeira do app e a versão leve assume o lugar com a mesma data (<a href="lib/media/video_compressor.dart"><code>video_compressor.dart</code></a>).
+</details>
 
-**Lixeira própria, uma por volume.** A lixeira do Android só aceita o que o MediaStore considera mídia. A do app é uma pasta escondida em cada volume (interno e cartão SD), então mover pra lá é um `rename`, instantâneo, sem copiar nada. Mandar algo do cartão pra lixeira do interno seria copiar o arquivo inteiro; com uma por volume isso nunca acontece, e na tela elas aparecem como uma só ([`trash_bin.dart`](lib/media/trash_bin.dart)).
+<details>
+<summary><b>Lixeira própria, uma por volume</b></summary>
+<br>
+A lixeira do Android só aceita o que o MediaStore considera mídia. A do app é uma pasta escondida em cada volume (interno e cartão SD), então mover pra lá é um <code>rename</code>, instantâneo, sem copiar nada. Mandar algo do cartão pra lixeira do interno seria copiar o arquivo inteiro; com uma por volume isso nunca acontece, e na tela elas aparecem como uma só (<a href="lib/media/trash_bin.dart"><code>trash_bin.dart</code></a>).
+</details>
 
-**Decisões em JSON com gravação agrupada.** Swipes seguidos viram uma gravação só, com escrita atômica (`.tmp` + rename), e grava na hora quando o app vai pro fundo ([`decision_store.dart`](lib/media/decision_store.dart)).
+<details>
+<summary><b>Decisões em JSON com gravação agrupada</b></summary>
+<br>
+Swipes seguidos viram uma gravação só, com escrita atômica (<code>.tmp</code> + rename), e grava na hora quando o app vai pro fundo (<a href="lib/media/decision_store.dart"><code>decision_store.dart</code></a>).
+</details>
 
-**Canal nativo pequeno.** O que o Dart não faz sozinho fica no [`MainActivity.kt`](android/app/src/main/kotlin/dev/gabrieloliveira/media_swipe/MainActivity.kt): permissão, miniaturas (`ThumbnailUtils`), espaço do aparelho (`StorageStatsManager`), metadados de vídeo e compressão.
+<details>
+<summary><b>Compartilhar sem copiar</b></summary>
+<br>
+Um <code>FileProvider</code> empresta acesso de leitura ao arquivo original pro app escolhido. Um pacote genérico copiaria o vídeo pro cache, ocupando o armazenamento de novo.
+</details>
+
+<details>
+<summary><b>Canal nativo pequeno</b></summary>
+<br>
+O que o Dart não faz sozinho fica no <a href="android/app/src/main/kotlin/dev/gabrieloliveira/media_swipe/MainActivity.kt"><code>MainActivity.kt</code></a>: permissão, miniaturas (<code>ThumbnailUtils</code>), espaço e volumes do aparelho (<code>StorageStatsManager</code>, <code>StorageManager</code>), metadados de vídeo, compressão e compartilhamento.
+</details>
 
 ## Estrutura
 
 ```
 lib/
-├── media/            # tudo que não é tela
+├── media/                    # tudo que não é tela
 │   ├── media_file.dart       # varredura do armazenamento + cache por pasta
-│   ├── media_library.dart    # a biblioteca em memória, álbuns, filtros
+│   ├── media_library.dart    # biblioteca em memória, volumes, álbuns, filtros
 │   ├── decision_store.dart   # marcados, mantidos, fila de compressão
-│   ├── trash_bin.dart        # lixeira do app
+│   ├── trash_bin.dart        # lixeira do app (uma por volume)
 │   ├── duplicate_finder.dart # funil de hash
 │   ├── compression.dart      # quando vale comprimir e como
-│   ├── video_compressor.dart # troca segura do arquivo
+│   ├── video_compressor.dart # troca segura do arquivo comprimido
+│   ├── media_mover.dart      # mover pro cartão com conferência
+│   ├── search.dart           # índice de busca
 │   └── native_bridge.dart    # ponte pro Kotlin
-├── screens/          # home, swipe, revisão, lixeira, duplicados, compressão...
-└── widgets/          # carta do swipe, preview de mídia, miniatura
+├── screens/                  # onboarding, home, swipe, revisão, lixeira, busca...
+└── widgets/                  # carta do swipe, preview de mídia, miniatura
 ```
 
 ## Rodando
@@ -69,18 +197,28 @@ Precisa de Flutter **3.38.7** (fixado no `.fvmrc`) e de um Android **11 ou mais 
 fvm install          # ou use o Flutter 3.38.7 instalado
 flutter pub get
 flutter run          # com o celular conectado
-flutter test         # testes de lógica (varredura, lixeira, hash, compressão...)
+flutter test         # 64 testes: varredura, lixeira, hash, compressão, busca, onboarding...
 flutter build apk --release --target-platform android-arm64
 ```
 
-Na primeira abertura o app explica e pede o **acesso a todos os arquivos**. Nada sai do celular: não tem internet, conta nem analytics.
+## Privacidade
+
+Na primeira abertura o app explica e só então pede o **acesso a todos os arquivos**. Nada sai do celular: o app não tem permissão de internet, conta nem analytics.
 
 ## Limitações
 
 - **Só Android**, e Android 11+. No iPhone não existe "ler o armazenamento": só a biblioteca do Fotos, que não vê a mídia do WhatsApp nem pastas. Por isso o projeto não tem a pasta `ios/`.
-- **Fora da Play Store**: o Google restringe a permissão de acesso a todos os arquivos pra apps comuns. Pra uso pessoal (APK direto) não muda nada.
+- **Fora da Play Store, por enquanto**: o Google restringe a permissão de acesso a todos os arquivos, e "acesso a mídia" está entre os usos não permitidos. Pra uso pessoal (APK direto) não muda nada.
 - **"Apps e dados" no painel é estimado**: é o que sobra depois de descontar sistema e arquivos visíveis. Separar app por app exigiria outra permissão.
 - **Compressão roda com o app aberto**, um vídeo por vez.
+
+## Protótipos
+
+O design foi pensado em HTML antes do código, e os protótipos ficaram no repositório:
+
+- [`design.html`](design.html): a proposta inicial, com o swipe clicável
+- [`onboarding.html`](onboarding.html): os cinco passos da primeira abertura
+- [`icons.html`](icons.html): os seis conceitos de ícone que foram pra votação
 
 ## Licença
 

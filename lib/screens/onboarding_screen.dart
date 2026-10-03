@@ -276,7 +276,9 @@ class _SwipeDemo extends StatefulWidget {
 
 class _SwipeDemoState extends State<_SwipeDemo> with TickerProviderStateMixin {
   static const _cards = [
-    (size: '144 MB', video: true, colors: [AppColors.delete, AppColors.orange]),
+    // A primeira carta é escura de propósito: os carimbos são vermelho, verde
+    // e roxo, e numa carta vermelha o APAGAR sumia.
+    (size: '144 MB', video: true, colors: [Color(0xFF34344A), Color(0xFF16161F)]),
     (size: '96 MB', video: true, colors: [Color(0xFF3FB6FF), Color(0xFF3A2A9E)]),
     (size: '9 MB', video: false, colors: [AppColors.warn, Color(0xFF9E2A5A)]),
     (size: '61 MB', video: true, colors: [AppColors.keep, Color(0xFF14513A)]),
