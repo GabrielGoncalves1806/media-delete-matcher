@@ -32,6 +32,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   MediaFilter _filter = MediaFilter.none;
   StorageStats? _storage;
 
+  /// Atualizando em segundo plano por cima do que veio do cache.
+  bool _updating = false;
+
   MediaLibrary get _library => widget.library;
 
   @override
@@ -60,7 +63,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       setState(() => _status = _Status.welcome);
       return;
     }
-    await _rescan();
+    await _library.trash.load();
+    await _library.trash.purgeExpired();
+    if (await _library.loadCached()) {
+      // Abre na hora com a última varredura e atualiza só o que mudou.
+      if (!mounted) return;
+      setState(() {
+        _status = _Status.ready;
+        _updating = true;
+      });
+      _refreshStorage();
+      await _library.scan();
+      if (mounted) setState(() => _updating = false);
+      _refreshStorage();
+    } else {
+      await _rescan();
+    }
   }
 
   void _requestAccess() {
@@ -68,13 +86,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _library.native.requestAllFilesAccess();
   }
 
+  /// Varredura completa, ignorando o cache (refresh manual e primeira vez).
   Future<void> _rescan() async {
     setState(() => _status = _Status.scanning);
     await _library.trash.load();
-    await _library.trash.purgeExpired();
-    await _library.scan();
+    await _library.scan(full: true);
     await _refreshStorage();
-    if (mounted) setState(() => _status = _Status.ready);
+    if (mounted) {
+      setState(() {
+        _status = _Status.ready;
+        _updating = false;
+      });
+    }
   }
 
   Future<void> _refreshStorage() async {
@@ -169,7 +192,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          _Header(onRefresh: _rescan),
+          _Header(onRefresh: _rescan, updating: _updating),
           const SizedBox(height: 16),
           if (_storage != null) _StorageCard(storage: _storage!, library: _library),
           if (widget.store.markedCount > 0)
@@ -226,9 +249,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onRefresh});
+  const _Header({required this.onRefresh, required this.updating});
 
   final VoidCallback onRefresh;
+  final bool updating;
 
   @override
   Widget build(BuildContext context) {
@@ -240,19 +264,28 @@ class _Header extends StatelessWidget {
             children: [
               Text('Mídias', style: display(32)),
               const SizedBox(height: 2),
-              const Text(
-                'O que tá ocupando teu celular',
-                style: TextStyle(color: AppColors.muted, fontSize: 13),
+              Text(
+                updating ? 'Atualizando…' : 'O que tá ocupando teu celular',
+                style: const TextStyle(color: AppColors.muted, fontSize: 13),
               ),
             ],
           ),
         ),
-        IconButton.filledTonal(
-          style: IconButton.styleFrom(backgroundColor: AppColors.surface),
-          onPressed: onRefresh,
-          icon: const Icon(Icons.refresh_rounded, color: AppColors.muted),
-          tooltip: 'Ler de novo',
-        ),
+        if (updating)
+          const Padding(
+            padding: EdgeInsets.all(12),
+            child: SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.muted),
+            ),
+          )
+        else
+          IconButton.filledTonal(
+            style: IconButton.styleFrom(backgroundColor: AppColors.surface),
+            onPressed: onRefresh,
+            icon: const Icon(Icons.refresh_rounded, color: AppColors.muted),
+            tooltip: 'Ler tudo de novo',
+          ),
       ],
     );
   }

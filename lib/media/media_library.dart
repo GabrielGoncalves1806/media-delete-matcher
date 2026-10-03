@@ -41,6 +41,15 @@ class MediaLibrary {
   /// Cache dos hashes da busca de duplicados.
   late final hashCache = JsonFile(File('$dataDir/hashes.json'));
 
+  /// Retrato de cada pasta da última varredura (ver [DirSnapshot]).
+  late final _scanCache = JsonFile(File('$dataDir/scan.json'));
+  var _snapshots = <String, DirSnapshot>{};
+
+  /// Caminhos que saíram enquanto uma varredura rodava: ela pode ter listado
+  /// a pasta antes, e não pode trazer o arquivo de volta.
+  final _forgottenDuringScan = <String>{};
+  bool _scanning = false;
+
   late final trash = TrashBin('$root/.media_swipe_trash', onFilesChanged: native.scanFiles);
   late final thumbnails = Thumbnails(native);
 
@@ -56,19 +65,58 @@ class MediaLibrary {
   MediaFile? byPath(String path) => _byPath[path];
   bool contains(String path) => _byPath.containsKey(path);
 
-  Future<void> scan() async {
-    final result = await _scanInIsolate(root, {trash.directory});
+  /// Mostra o resultado da última varredura sem tocar no armazenamento.
+  /// False se não tem cache (primeira abertura).
+  Future<bool> loadCached() async {
+    final data = await _scanCache.read();
+    if (data is! Map<String, dynamic>) return false;
+    try {
+      _snapshots = {
+        for (final MapEntry(:key, :value) in (data['dirs'] as Map<String, dynamic>).entries)
+          key: DirSnapshot.fromJson(key, value as Map<String, dynamic>),
+      };
+    } on Object {
+      return false; // formato antigo ou corrompido: faz a varredura completa
+    }
+    otherBytes = _snapshots.values.fold(0, (sum, s) => sum + s.otherBytes);
+    _set(_sorted(_snapshots.values.expand((s) => s.media)));
+    return true;
+  }
+
+  /// Lê o armazenamento. Por padrão só relista as pastas que mudaram desde a
+  /// última vez; [full] ignora o cache.
+  /// Devolve quantas pastas foram listadas de verdade.
+  Future<int> scan({bool full = false}) async {
+    _scanning = true;
+    _forgottenDuringScan.clear();
+    final result = await _scanInIsolate(root, {trash.directory}, full ? const {} : _snapshots);
+    _scanning = false;
+
+    _snapshots = result.snapshots;
     otherBytes = result.otherBytes;
-    _set(result.media..sort((a, b) => b.size.compareTo(a.size)));
+    final gone = Set.of(_forgottenDuringScan);
+    _set(_sorted(result.media.where((f) => !gone.contains(f.path))));
+    await _scanCache.write({
+      'dirs': {for (final e in _snapshots.entries) e.key: e.value.toJson()},
+    });
+    return result.listedDirs;
   }
 
   /// Estático pra closure do isolate não capturar o `this`.
-  static Future<StorageScan> _scanInIsolate(String root, Set<String> skip) =>
-      Isolate.run(() => scanStorage(root, skip: skip));
+  static Future<StorageScan> _scanInIsolate(
+    String root,
+    Set<String> skip,
+    Map<String, DirSnapshot> previous,
+  ) =>
+      Isolate.run(() => scanStorage(root, skip: skip, previous: previous));
+
+  static List<MediaFile> _sorted(Iterable<MediaFile> files) =>
+      files.toList()..sort((a, b) => b.size.compareTo(a.size));
 
   /// Tira da lista arquivos que saíram (pra lixeira, por exemplo).
   void forget(Iterable<String> paths) {
     final gone = paths.toSet();
+    if (_scanning) _forgottenDuringScan.addAll(gone);
     _set(_files.where((f) => !gone.contains(f.path)).toList());
   }
 

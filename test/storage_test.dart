@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -44,6 +45,66 @@ void main() {
       expect(scan.media.map((f) => f.name), ['ok.webp']);
       // ocultos e não-mídia contam como "outros"; Android/data e skip não
       expect(scan.otherBytes, 3 + 5 + 7);
+    });
+  });
+
+  group('scanStorage incremental', () {
+    /// Joga a data de todas as pastas pro passado: simula pastas que já
+    /// existiam antes, em vez de criadas no mesmo instante do teste.
+    void ageDirs() {
+      final dirs = [root, ...root.listSync(recursive: true).whereType<Directory>()];
+      for (final d in dirs) {
+        Process.runSync('touch', ['-m', '-t', '202001010000', d.path]);
+      }
+    }
+
+    test('pasta mexida agora sempre é relistada', () {
+      put('DCIM/Camera/a.jpg', size: 100);
+      final first = scanStorage(root.path);
+      final second = scanStorage(root.path, previous: first.snapshots);
+      expect(second.listedDirs, first.listedDirs);
+    });
+
+    test('sem mudança, nada é relistado e o resultado é o mesmo', () {
+      put('DCIM/Camera/a.jpg', size: 100);
+      put('WhatsApp Video/v.mp4', size: 400);
+      put('WhatsApp Video/.Statuses/s.jpg', size: 9);
+      ageDirs();
+
+      final first = scanStorage(root.path);
+      expect(first.listedDirs, greaterThan(0));
+
+      final second = scanStorage(root.path, previous: first.snapshots);
+      expect(second.listedDirs, 0);
+      expect(second.media.map((f) => f.path).toSet(), first.media.map((f) => f.path).toSet());
+      expect(second.otherBytes, first.otherBytes);
+    });
+
+    test('só relista a pasta que mudou', () {
+      put('DCIM/Camera/a.jpg', size: 100);
+      put('WhatsApp Video/v.mp4', size: 400);
+      ageDirs();
+      final first = scanStorage(root.path);
+
+      put('WhatsApp Video/novo.mp4', size: 50);
+      File('${root.path}/DCIM/Camera/a.jpg').deleteSync();
+      final second = scanStorage(root.path, previous: first.snapshots);
+
+      expect(second.listedDirs, 2); // WhatsApp Video e DCIM/Camera
+      expect(second.media.map((f) => f.name).toSet(), {'v.mp4', 'novo.mp4'});
+    });
+
+    test('o retrato sobrevive ao JSON', () {
+      put('DCIM/Camera/IMG 1.jpg', size: 100);
+      put('DCIM/Camera/.hidden/x.bin', size: 3);
+      final scan = scanStorage(root.path);
+      final dir = '${root.path}/DCIM/Camera';
+
+      final back = DirSnapshot.fromJson(dir, jsonDecode(jsonEncode(scan.snapshots[dir]!.toJson())));
+      expect(back.media.single.path, '$dir/IMG 1.jpg');
+      expect(back.media.single.size, 100);
+      expect(back.subdirs, ['$dir/.hidden']);
+      expect(back.modified, scan.snapshots[dir]!.modified);
     });
   });
 
@@ -145,6 +206,28 @@ void main() {
       expect(albums.map((a) => a.name), ['WhatsApp Video', 'Camera']);
       expect(albums.last.bytes, 50); // só o que falta revisar
       expect(library.all(MediaFilter.none, isDecided: decided.contains).files, hasLength(2));
+    });
+  });
+
+  group('MediaLibrary cache', () {
+    test('abre do cache e não traz de volta o que saiu durante a varredura', () async {
+      put('DCIM/Camera/a.jpg', size: 100);
+      put('DCIM/Camera/b.jpg', size: 50);
+      final dataDir = '${root.path}/.app';
+
+      final library = MediaLibrary(root: root.path, dataDir: dataDir);
+      expect(await library.loadCached(), isFalse); // primeira vez
+      await library.scan();
+
+      final reopened = MediaLibrary(root: root.path, dataDir: dataDir);
+      expect(await reopened.loadCached(), isTrue);
+      expect(reopened.files.map((f) => f.name), ['a.jpg', 'b.jpg']);
+
+      // varredura começa, e no meio um arquivo vai pra lixeira
+      final scanning = reopened.scan(full: true);
+      reopened.forget(['${root.path}/DCIM/Camera/a.jpg']);
+      await scanning;
+      expect(reopened.files.map((f) => f.name), ['b.jpg']);
     });
   });
 }
