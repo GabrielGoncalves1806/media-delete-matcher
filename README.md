@@ -11,7 +11,7 @@ e só apaga no final, numa confirmação só.</p>
 <p>
 <img src="https://img.shields.io/badge/Flutter-3.38-02569B?logo=flutter&logoColor=white" alt="Flutter 3.38">
 <img src="https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white" alt="Android 11+">
-<img src="https://img.shields.io/badge/testes-64-2FD47A" alt="64 testes">
+<img src="https://img.shields.io/badge/testes-66-2FD47A" alt="66 testes">
 <img src="https://img.shields.io/badge/licença-MIT-7C6CFF" alt="Licença MIT">
 </p>
 
@@ -197,7 +197,7 @@ Precisa de Flutter **3.38.7** (fixado no `.fvmrc`) e de um Android **11 ou mais 
 fvm install          # ou use o Flutter 3.38.7 instalado
 flutter pub get
 flutter run          # com o celular conectado
-flutter test         # 64 testes: varredura, lixeira, hash, compressão, busca, onboarding...
+flutter test         # 66 testes: varredura, lixeira, hash, compressão, busca, onboarding...
 flutter build apk --release --target-platform android-arm64
 ```
 

@@ -19,6 +19,10 @@ class DuplicateGroup {
   String? keeperPath;
 
   bool get deleteAll => keeperPath == null;
+
+  /// O usuário já olhou esse grupo (escolheu, apagou todas ou aceitou a
+  /// sugestão). Só pro progresso da tela; não muda o que sai.
+  bool reviewed = false;
   int get bytesEach => items.first.size;
 
   /// O que vai pra lixeira: todas menos a que fica (ou todas).

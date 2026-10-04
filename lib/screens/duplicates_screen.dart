@@ -8,6 +8,7 @@ import '../media/media_library.dart';
 import '../theme.dart';
 import '../widgets/media_thumb.dart';
 import 'review_screen.dart';
+import 'viewer_screen.dart';
 
 /// Varre a galeria atrás de cópias idênticas e deixa marcar todas
 /// (menos uma de cada grupo) de uma vez.
@@ -77,6 +78,19 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
     if (trashed ?? false) _scan();
   }
 
+  /// Tela cheia pra ver direito o que é (a miniatura não basta).
+  void _open(MediaFile file) => Navigator.of(context).push(
+        MaterialPageRoute(
+          fullscreenDialog: true,
+          builder: (_) => ViewerScreen(
+            file: file,
+            thumbnails: widget.library.thumbnails,
+            onShare: () => widget.library.native.share([file.path]),
+            showDecisions: false,
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final groups = _groups;
@@ -98,37 +112,27 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
                         itemCount: groups.length + 1,
                         itemBuilder: (context, i) {
                           if (i == 0) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 14),
-                              child: Text.rich(
-                                TextSpan(
-                                  children: [
-                                    TextSpan(
-                                      text: '${plural(_copyCount, 'arquivo', 'arquivos')} · ${formatBytes(_toFree)}',
-                                      style: const TextStyle(
-                                        color: AppColors.delete,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    TextSpan(
-                                      text: ' pra sair, em ${plural(groups.length, 'grupo', 'grupos')}. '
-                                          'A verde fica; toca em outra pra trocar, ou em "Apagar todas" '
-                                          'pra não ficar nenhuma.',
-                                    ),
-                                  ],
-                                ),
-                                style: const TextStyle(color: AppColors.muted),
-                              ),
+                            return _ReviewProgress(
+                              reviewed: groups.where((g) => g.reviewed).length,
+                              total: groups.length,
+                              files: _copyCount,
+                              bytes: _toFree,
                             );
                           }
                           final group = groups[i - 1];
                           return _GroupCard(
                             group: group,
                             library: widget.library,
-                            onPickKeeper: (path) => setState(() => group.keeperPath = path),
+                            onPickKeeper: (path) => setState(() {
+                              group.keeperPath = path;
+                              group.reviewed = true;
+                            }),
                             onToggleDeleteAll: () => setState(() {
                               group.keeperPath = group.deleteAll ? chooseKeeper(group.items).path : null;
+                              group.reviewed = true;
                             }),
+                            onAccept: () => setState(() => group.reviewed = true),
+                            onOpen: _open,
                           );
                         },
                       ),
@@ -211,12 +215,74 @@ class _Progress extends StatelessWidget {
   }
 }
 
+/// "5 de 17 grupos revisados", com barra, e o total que vai sair.
+class _ReviewProgress extends StatelessWidget {
+  const _ReviewProgress({
+    required this.reviewed,
+    required this.total,
+    required this.files,
+    required this.bytes,
+  });
+
+  final int reviewed;
+  final int total;
+  final int files;
+  final int bytes;
+
+  @override
+  Widget build(BuildContext context) {
+    final done = reviewed == total;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(18)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  done ? 'Tudo revisado ✓' : '$reviewed de ${plural(total, 'grupo', 'grupos')} revisados',
+                  style: display(17, color: done ? AppColors.keep : AppColors.text),
+                ),
+              ),
+              Text(
+                '${plural(files, 'arquivo', 'arquivos')} · ${formatBytes(bytes)}',
+                style: const TextStyle(color: AppColors.delete, fontWeight: FontWeight.w700, fontSize: 13),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: total == 0 ? 0 : reviewed / total,
+              minHeight: 6,
+              color: AppColors.keep,
+              backgroundColor: AppColors.surface2,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'A verde fica. Toca em outra pra trocar, em "Apagar todas" pra não ficar nenhuma, '
+            'ou em "Tá certo" pra aceitar. Segura uma cópia pra ver em tela cheia.',
+            style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _GroupCard extends StatelessWidget {
   const _GroupCard({
     required this.group,
     required this.library,
     required this.onPickKeeper,
     required this.onToggleDeleteAll,
+    required this.onAccept,
+    required this.onOpen,
   });
 
   final DuplicateGroup group;
@@ -226,8 +292,21 @@ class _GroupCard extends StatelessWidget {
   final ValueChanged<String> onPickKeeper;
   final VoidCallback onToggleDeleteAll;
 
+  /// Aceita a sugestão como está (conta como revisado).
+  final VoidCallback onAccept;
+  final ValueChanged<MediaFile> onOpen;
+
   @override
   Widget build(BuildContext context) {
+    // Revisado fica mais discreto, pra destacar os que faltam.
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 200),
+      opacity: group.reviewed ? 0.6 : 1,
+      child: _card(),
+    );
+  }
+
+  Widget _card() {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
@@ -253,15 +332,37 @@ class _GroupCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (group.reviewed)
+                const Padding(
+                  padding: EdgeInsets.only(left: 8),
+                  child: Icon(Icons.check_circle_rounded, color: AppColors.keep, size: 20),
+                ),
+            ],
+          ),
+          Row(
+            children: [
               TextButton.icon(
                 onPressed: onToggleDeleteAll,
                 style: TextButton.styleFrom(
                   foregroundColor: group.deleteAll ? AppColors.text : AppColors.delete,
                   visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
                 icon: Icon(group.deleteAll ? Icons.undo_rounded : Icons.delete_sweep_rounded, size: 18),
                 label: Text(group.deleteAll ? 'Manter uma' : 'Apagar todas'),
               ),
+              const Spacer(),
+              if (!group.reviewed)
+                TextButton.icon(
+                  onPressed: onAccept,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.keep,
+                    visualDensity: VisualDensity.compact,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: const Text('Tá certo'),
+                ),
             ],
           ),
           const SizedBox(height: 6),
@@ -279,6 +380,7 @@ class _GroupCard extends StatelessWidget {
                   library: library,
                   isKeeper: file.path == group.keeperPath,
                   onTap: () => onPickKeeper(file.path),
+                  onOpen: () => onOpen(file),
                 );
               },
             ),
@@ -296,12 +398,16 @@ class _CopyTile extends StatelessWidget {
     required this.library,
     required this.isKeeper,
     required this.onTap,
+    required this.onOpen,
   });
 
   final MediaFile file;
   final MediaLibrary library;
   final bool isKeeper;
+
+  /// Tocar escolhe qual fica; segurar (ou o ícone no canto) abre em tela cheia.
   final VoidCallback onTap;
+  final VoidCallback onOpen;
 
   /// ".../WhatsApp Video/Sent/x.mp4" -> "WhatsApp Video/Sent"
   String get _folder {
@@ -314,6 +420,7 @@ class _CopyTile extends StatelessWidget {
     final color = isKeeper ? AppColors.keep : AppColors.delete;
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onOpen,
       child: SizedBox(
         width: 96,
         child: Column(
@@ -348,6 +455,27 @@ class _CopyTile extends StatelessWidget {
                         child: Text(
                           isKeeper ? 'FICA' : 'SAI',
                           style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
+                        ),
+                      ),
+                    ),
+                    // abre em tela cheia (com área de toque maior que o ícone)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: GestureDetector(
+                        onTap: onOpen,
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                            child: Icon(
+                              file.isVideo ? Icons.play_arrow_rounded : Icons.open_in_full_rounded,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
                       ),
                     ),

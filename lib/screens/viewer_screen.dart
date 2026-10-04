@@ -15,11 +15,20 @@ import '../widgets/swipe_card.dart';
 /// toque), vídeo com som, pausa e barra de progresso arrastável.
 /// Devolve a decisão (ou null se só fechou).
 class ViewerScreen extends StatefulWidget {
-  const ViewerScreen({super.key, required this.file, required this.thumbnails, this.onShare});
+  const ViewerScreen({
+    super.key,
+    required this.file,
+    required this.thumbnails,
+    this.onShare,
+    this.showDecisions = true,
+  });
 
   final MediaFile file;
   final Thumbnails thumbnails;
   final VoidCallback? onShare;
+
+  /// Botões Apagar/Manter embaixo. Fora do swipe (duplicados) é só pra ver.
+  final bool showDecisions;
 
   @override
   State<ViewerScreen> createState() => _ViewerScreenState();
@@ -120,11 +129,20 @@ class _ViewerScreenState extends State<ViewerScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontWeight: FontWeight.w700)),
+                            Text(
+                              file.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
                             Text(
                               '${file.folderName} · ${formatDate(file.modified)}',
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -164,29 +182,30 @@ class _ViewerScreenState extends State<ViewerScreen> {
                     children: [
                       if (_video != null) ...[
                         _VideoBar(video: _video!, onTogglePlay: _togglePlay),
-                        const SizedBox(height: 16),
+                        if (widget.showDecisions) const SizedBox(height: 16),
                       ],
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _DecisionButton(
-                              label: 'Apagar',
-                              icon: Icons.close_rounded,
-                              color: AppColors.delete,
-                              onTap: () => _decide(SwipeDirection.delete),
+                      if (widget.showDecisions)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _DecisionButton(
+                                label: 'Apagar',
+                                icon: Icons.close_rounded,
+                                color: AppColors.delete,
+                                onTap: () => _decide(SwipeDirection.delete),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _DecisionButton(
-                              label: 'Manter',
-                              icon: Icons.check_rounded,
-                              color: AppColors.keep,
-                              onTap: () => _decide(SwipeDirection.keep),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _DecisionButton(
+                                label: 'Manter',
+                                icon: Icons.check_rounded,
+                                color: AppColors.keep,
+                                onTap: () => _decide(SwipeDirection.keep),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
                     ],
                   ),
                 ),
@@ -227,7 +246,11 @@ class _ViewerScreenState extends State<ViewerScreen> {
       return Center(
         child: SizedBox.square(
           dimension: 220,
-          child: MediaThumb(path: widget.file.path, isVideo: true, thumbnails: widget.thumbnails),
+          child: MediaThumb(
+            path: widget.file.path,
+            isVideo: true,
+            thumbnails: widget.thumbnails,
+          ),
         ),
       );
     }
@@ -243,7 +266,10 @@ class _ViewerScreenState extends State<ViewerScreen> {
               if (!video.value.isPlaying)
                 Container(
                   padding: const EdgeInsets.all(14),
-                  decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                  decoration: const BoxDecoration(
+                    color: Colors.black45,
+                    shape: BoxShape.circle,
+                  ),
                   child: const Icon(Icons.play_arrow_rounded, size: 40),
                 ),
             ],
@@ -267,9 +293,14 @@ class _VideoBar extends StatelessWidget {
       children: [
         IconButton(
           onPressed: onTogglePlay,
-          icon: Icon(value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
+          icon: Icon(
+            value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          ),
         ),
-        Text(formatDuration(value.position), style: const TextStyle(fontSize: 12)),
+        Text(
+          formatDuration(value.position),
+          style: const TextStyle(fontSize: 12),
+        ),
         const SizedBox(width: 10),
         Expanded(
           child: VideoProgressIndicator(
@@ -284,7 +315,10 @@ class _VideoBar extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Text(formatDuration(value.duration), style: const TextStyle(fontSize: 12)),
+        Text(
+          formatDuration(value.duration),
+          style: const TextStyle(fontSize: 12),
+        ),
       ],
     );
   }
@@ -318,7 +352,14 @@ class _DecisionButton extends StatelessWidget {
             children: [
               Icon(icon, color: color, size: 20),
               const SizedBox(width: 8),
-              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15)),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
             ],
           ),
         ),
