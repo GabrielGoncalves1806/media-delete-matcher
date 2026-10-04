@@ -52,6 +52,9 @@ class MediaLibrary {
   /// Cache dos hashes da busca de duplicados.
   late final hashCache = JsonFile(File('$dataDir/hashes.json'));
 
+  /// Cache das impressões digitais da busca de parecidos.
+  late final fingerprintCache = JsonFile(File('$dataDir/fingerprints.json'));
+
   /// Retrato de cada pasta da última varredura (ver [DirSnapshot]).
   late final _scanCache = JsonFile(File('$dataDir/scan.json'));
   var _snapshots = <String, DirSnapshot>{};

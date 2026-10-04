@@ -10,9 +10,13 @@ typedef ScanProgress = void Function(ScanStage stage, int done, int total);
 
 /// Um conjunto de arquivos idênticos byte a byte.
 class DuplicateGroup {
-  DuplicateGroup(this.items) : keeperPath = chooseKeeper(items).path;
+  /// [similar]: parecidos (não idênticos). Aí os tamanhos variam e a
+  /// sugestão é ficar com o maior, que costuma ser a melhor qualidade.
+  DuplicateGroup(this.items, {this.similar = false})
+      : keeperPath = (similar ? chooseLargest(items) : chooseKeeper(items)).path;
 
   final List<MediaFile> items;
+  final bool similar;
 
   /// Qual cópia fica. O resto pode ir pra lixeira.
   /// Null = nenhuma fica (as duas eram lixo, tipo o mesmo meme em dois grupos).
@@ -23,16 +27,19 @@ class DuplicateGroup {
   /// O usuário já olhou esse grupo (escolheu, apagou todas ou aceitou a
   /// sugestão). Só pro progresso da tela; não muda o que sai.
   bool reviewed = false;
+  /// Tamanho de cada cópia (nos idênticos é igual pra todas).
   int get bytesEach => items.first.size;
+  int get totalBytes => items.fold(0, (sum, f) => sum + f.size);
 
   /// O que vai pra lixeira: todas menos a que fica (ou todas).
   Iterable<MediaFile> get copies => items.where((f) => f.path != keeperPath);
 
-  /// Quanto a duplicação desperdiça (fixo, pra ordenar os grupos).
-  int get wastedBytes => bytesEach * (items.length - 1);
+  /// Quanto a duplicação desperdiça: tudo menos a maior cópia (fixo, pra
+  /// ordenar os grupos). Nos idênticos dá tamanho × (cópias - 1).
+  int get wastedBytes => totalBytes - items.map((f) => f.size).reduce((a, b) => a > b ? a : b);
 
   /// Quanto sai de fato com a escolha atual.
-  int get bytesToFree => bytesEach * copies.length;
+  int get bytesToFree => copies.fold(0, (sum, f) => sum + f.size);
 }
 
 /// Prefere a cópia da câmera (DCIM) e, empatando, a mais antiga:
@@ -42,6 +49,16 @@ MediaFile chooseKeeper(List<MediaFile> items) {
   final sorted = [...items]..sort((a, b) {
       final byFolder = rank(a).compareTo(rank(b));
       return byFolder != 0 ? byFolder : a.modified.compareTo(b.modified);
+    });
+  return sorted.first;
+}
+
+/// Nos parecidos: fica a maior (melhor qualidade); empatando, a da câmera.
+MediaFile chooseLargest(List<MediaFile> items) {
+  final sorted = [...items]..sort((a, b) {
+      final bySize = b.size.compareTo(a.size);
+      if (bySize != 0) return bySize;
+      return chooseKeeper([a, b]) == a ? -1 : 1;
     });
   return sorted.first;
 }

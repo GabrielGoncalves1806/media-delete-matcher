@@ -4,6 +4,7 @@ import android.app.usage.StorageStatsManager
 import android.content.ClipData
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.media.MediaMetadataRetriever
 import android.media.MediaScannerConnection
 import android.media.ThumbnailUtils
@@ -39,6 +40,9 @@ import java.util.concurrent.Executors
  * O que o Dart não faz sozinho: permissão de "acesso a todos os arquivos",
  * miniaturas, espaço livre e avisar a galeria quando um arquivo sai do lugar.
  */
+/** Quadro chapado ou que não abriu (o Dart ignora na comparação). */
+private const val FLAT_FRAME = Long.MIN_VALUE
+
 private val VIDEO_EXTENSIONS = setOf("mp4", "mkv", "mov", "3gp", "webm", "avi", "m4v")
 
 class MainActivity : FlutterActivity() {
@@ -129,6 +133,21 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
 
+                    "fingerprints" -> {
+                        val paths = call.argument<List<String>>("paths")!!
+                        val videos = call.argument<List<Boolean>>("videos")!!
+                        worker.execute {
+                            val out = paths.indices.map { i ->
+                                try {
+                                    fingerprint(paths[i], videos[i])
+                                } catch (e: Exception) {
+                                    null // arquivo que não abre: fica de fora
+                                }
+                            }
+                            main.post { result.success(out) }
+                        }
+                    }
+
                     "scanFiles" -> {
                         val paths = call.argument<List<String>>("paths")!!
                         if (paths.isNotEmpty()) {
@@ -214,6 +233,69 @@ class MainActivity : FlutterActivity() {
             uris.drop(1).forEach { addItem(ClipData.Item(it)) }
         }
         startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    }
+
+    /**
+     * "Impressão digital" pra achar mídia parecida (não idêntica): vídeo vira
+     * 3 quadros (a 10%, 50% e 90%), foto vira 1. Cada quadro é reduzido a
+     * 9×8 em cinza e vira 64 bits (dHash: cada bit diz se o pixel é mais
+     * claro que o vizinho). Quadros parecidos têm poucos bits diferentes,
+     * mesmo depois de recomprimir ou mudar a resolução.
+     */
+    private fun fingerprint(path: String, video: Boolean): Map<String, Any> {
+        if (!video) {
+            val thumb = ThumbnailUtils.createImageThumbnail(File(path), Size(64, 64), null)
+            val hash = dHash(thumb)
+            thumb.recycle()
+            return mapOf("duration" to 0L, "hashes" to longArrayOf(hash))
+        }
+        val retriever = MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(path)
+            val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            val hashes = LongArray(3)
+            listOf(0.1, 0.5, 0.9).forEachIndexed { i, at ->
+                val frame = retriever.getScaledFrameAtTime(
+                    (duration * 1000 * at).toLong(),
+                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+                    64,
+                    64,
+                )
+                hashes[i] = if (frame == null) FLAT_FRAME else dHash(frame).also { frame.recycle() }
+            }
+            return mapOf("duration" to duration, "hashes" to hashes)
+        } finally {
+            retriever.release()
+        }
+    }
+
+    private fun dHash(source: Bitmap): Long {
+        val small = Bitmap.createScaledBitmap(source, 9, 8, true)
+        val gray = IntArray(72)
+        var min = 255
+        var max = 0
+        for (y in 0 until 8) {
+            for (x in 0 until 9) {
+                val c = small.getPixel(x, y)
+                val g = (Color.red(c) * 299 + Color.green(c) * 587 + Color.blue(c) * 114) / 1000
+                gray[y * 9 + x] = g
+                if (g < min) min = g
+                if (g > max) max = g
+            }
+        }
+        if (small != source) small.recycle()
+        // Quadro chapado (tela preta, branca...): qualquer um "parece" com
+        // qualquer outro. Marca pra comparação ignorar.
+        if (max - min < 12) return FLAT_FRAME
+        var hash = 0L
+        var bit = 0
+        for (y in 0 until 8) {
+            for (x in 0 until 8) {
+                if (gray[y * 9 + x] > gray[y * 9 + x + 1]) hash = hash or (1L shl bit)
+                bit++
+            }
+        }
+        return hash
     }
 
     /** Largura e altura já como aparecem na tela (rotação aplicada). */

@@ -11,7 +11,7 @@ e só apaga no final, numa confirmação só.</p>
 <p>
 <img src="https://img.shields.io/badge/Flutter-3.38-02569B?logo=flutter&logoColor=white" alt="Flutter 3.38">
 <img src="https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white" alt="Android 11+">
-<img src="https://img.shields.io/badge/testes-67-2FD47A" alt="67 testes">
+<img src="https://img.shields.io/badge/testes-74-2FD47A" alt="74 testes">
 <img src="https://img.shields.io/badge/licença-MIT-7C6CFF" alt="Licença MIT">
 </p>
 
@@ -92,8 +92,8 @@ No celular onde ele nasceu, a faxina foi de **847 MB livres pra 13 GB**.
       Recodifica em 720p no próprio celular. Só aparece quando compensa; se não ficar bem menor, nada muda.
     </td>
     <td valign="top">
-      <h4>⧉ Duplicados exatos</h4>
-      O mesmo arquivo salvo mais de uma vez, byte a byte. Fica uma cópia de cada, ou nenhuma.
+      <h4>⧉ Duplicados e parecidos</h4>
+      Cópias idênticas, byte a byte, e também <b>parecidas</b>: o mesmo vídeo recomprimido pelo WhatsApp, a mesma foto em outra resolução, rajada. Fica uma de cada, ou nenhuma.
     </td>
   </tr>
   <tr>
@@ -141,6 +141,12 @@ Ler dezenas de GB inteiros pra comparar seria lento demais. Então: agrupa por t
 </details>
 
 <details>
+<summary><b>Parecidos por "impressão digital"</b></summary>
+<br>
+Vídeo recomprimido tem bytes diferentes, então o hash não pega. Aqui o Android extrai 3 quadros de cada vídeo (1 de cada foto), reduz cada um a 9×8 em cinza e transforma em 64 bits (dHash). Quadros parecidos têm poucos bits diferentes mesmo mudando resolução e compressão. Primeiro filtra por duração parecida (de graça), e só compara impressões de quem sobrou; quadro chapado (tela preta) é ignorado pra não dar falso positivo (<a href="lib/media/similar_finder.dart"><code>similar_finder.dart</code></a>).
+</details>
+
+<details>
 <summary><b>Compressão sem risco</b></summary>
 <br>
 Com o <a href="https://developer.android.com/media/media3/transformer">Media3 Transformer</a> (codec de hardware, sem ffmpeg): recodifica pra um temporário escondido; se não ficou pelo menos 15% menor, descarta; se ficou, o original vai pra lixeira do app e a versão leve assume o lugar com a mesma data (<a href="lib/media/video_compressor.dart"><code>video_compressor.dart</code></a>).
@@ -179,7 +185,8 @@ lib/
 │   ├── media_library.dart    # biblioteca em memória, volumes, álbuns, filtros
 │   ├── decision_store.dart   # marcados, mantidos, fila de compressão
 │   ├── trash_bin.dart        # lixeira do app (uma por volume)
-│   ├── duplicate_finder.dart # funil de hash
+│   ├── duplicate_finder.dart # funil de hash (idênticos)
+│   ├── similar_finder.dart   # impressão digital (parecidos)
 │   ├── compression.dart      # quando vale comprimir e como
 │   ├── video_compressor.dart # troca segura do arquivo comprimido
 │   ├── media_mover.dart      # mover pro cartão com conferência
@@ -197,7 +204,7 @@ Precisa de Flutter **3.38.7** (fixado no `.fvmrc`) e de um Android **11 ou mais 
 fvm install          # ou use o Flutter 3.38.7 instalado
 flutter pub get
 flutter run          # com o celular conectado
-flutter test         # 67 testes: varredura, lixeira, hash, compressão, busca, onboarding...
+flutter test         # 74 testes: varredura, lixeira, hash, compressão, busca, onboarding...
 flutter build apk --release --target-platform android-arm64
 ```
 

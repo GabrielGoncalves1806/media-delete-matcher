@@ -5,30 +5,80 @@ import '../media/decision_store.dart';
 import '../media/duplicate_finder.dart';
 import '../media/media_file.dart';
 import '../media/media_library.dart';
+import '../media/similar_finder.dart';
 import '../theme.dart';
 import '../widgets/media_thumb.dart';
 import 'review_screen.dart';
 import 'viewer_screen.dart';
 
-/// Varre a galeria atrás de cópias idênticas e deixa marcar todas
-/// (menos uma de cada grupo) de uma vez.
-class DuplicatesScreen extends StatefulWidget {
-  const DuplicatesScreen({super.key, required this.library, required this.store});
+/// Cópias pra limpar, em duas abas: idênticas (byte a byte) e parecidas
+/// (o mesmo vídeo recomprimido, a mesma foto em outra resolução, rajada...).
+class DuplicatesScreen extends StatelessWidget {
+  const DuplicatesScreen({
+    super.key,
+    required this.library,
+    required this.store,
+  });
 
   final MediaLibrary library;
   final DecisionStore store;
 
   @override
-  State<DuplicatesScreen> createState() => _DuplicatesScreenState();
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Duplicados'),
+          bottom: const TabBar(
+            indicatorColor: AppColors.accent,
+            labelColor: AppColors.text,
+            unselectedLabelColor: AppColors.muted,
+            tabs: [
+              Tab(text: 'Idênticos'),
+              Tab(text: 'Parecidos'),
+            ],
+          ),
+        ),
+        // A aba de parecidos só começa a calcular quando é aberta (TabBarView
+        // só monta a aba visível), e cada aba guarda o resultado ao trocar.
+        body: TabBarView(
+          children: [
+            _GroupsTab(library: library, store: store, similar: false),
+            _GroupsTab(library: library, store: store, similar: true),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _DuplicatesScreenState extends State<DuplicatesScreen> {
-  late final _finder = DuplicateFinder(widget.library.hashCache);
+class _GroupsTab extends StatefulWidget {
+  const _GroupsTab({
+    required this.library,
+    required this.store,
+    required this.similar,
+  });
+
+  final MediaLibrary library;
+  final DecisionStore store;
+  final bool similar;
+
+  @override
+  State<_GroupsTab> createState() => _GroupsTabState();
+}
+
+class _GroupsTabState extends State<_GroupsTab>
+    with AutomaticKeepAliveClientMixin {
   List<DuplicateGroup>? _groups;
-  ScanStage _stage = ScanStage.partial;
+  String _step = '';
+  String _label = 'Preparando…';
   int _done = 0;
   int _total = 0;
   bool _cancelled = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -42,20 +92,60 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
     super.dispose();
   }
 
+  void _progress(String step, String label, int done, int total) {
+    if (!mounted) return;
+    setState(() {
+      _step = step;
+      _label = label;
+      _done = done;
+      _total = total;
+    });
+  }
+
   Future<void> _scan() async {
     setState(() => _groups = null);
-    final groups = await _finder.scan(
-      widget.library.files,
-      isCancelled: () => _cancelled,
-      onProgress: (stage, done, total) {
-        if (!mounted) return;
-        setState(() {
-          _stage = stage;
-          _done = done;
-          _total = total;
-        });
-      },
-    );
+    final library = widget.library;
+    final List<DuplicateGroup> groups;
+    if (widget.similar) {
+      groups = await SimilarFinder(library.native, library.fingerprintCache)
+          .scan(
+            library.files,
+            isCancelled: () => _cancelled,
+            onProgress: (stage, done, total) => switch (stage) {
+              SimilarStage.reading => _progress(
+                'Passo 1 de 2',
+                'Lendo a "impressão digital" de cada foto e vídeo',
+                done,
+                total,
+              ),
+              SimilarStage.comparing => _progress(
+                'Passo 2 de 2',
+                'Comparando o que parece com o quê',
+                0,
+                0,
+              ),
+            },
+          );
+    } else {
+      groups = await DuplicateFinder(library.hashCache).scan(
+        library.files,
+        isCancelled: () => _cancelled,
+        onProgress: (stage, done, total) => switch (stage) {
+          ScanStage.partial => _progress(
+            'Passo 1 de 2',
+            'Comparando começo e fim dos arquivos',
+            done,
+            total,
+          ),
+          ScanStage.full => _progress(
+            'Passo 2 de 2',
+            'Confirmando cópias (hash completo)',
+            done,
+            total,
+          ),
+        },
+      );
+    }
     if (mounted) setState(() => _groups = groups);
   }
 
@@ -72,7 +162,8 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
     }
     final trashed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => ReviewScreen(library: widget.library, store: widget.store),
+        builder: (_) =>
+            ReviewScreen(library: widget.library, store: widget.store),
       ),
     );
     if (trashed ?? false) _scan();
@@ -80,102 +171,109 @@ class _DuplicatesScreenState extends State<DuplicatesScreen> {
 
   /// Tela cheia pra ver direito o que é (a miniatura não basta).
   void _open(MediaFile file) => Navigator.of(context).push(
-        MaterialPageRoute(
-          fullscreenDialog: true,
-          builder: (_) => ViewerScreen(
-            file: file,
-            thumbnails: widget.library.thumbnails,
-            onShare: () => widget.library.native.share([file.path]),
-            showDecisions: false,
-          ),
-        ),
-      );
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => ViewerScreen(
+        file: file,
+        thumbnails: widget.library.thumbnails,
+        onShare: () => widget.library.native.share([file.path]),
+        showDecisions: false,
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final groups = _groups;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Duplicados'),
-      ),
-      body: groups == null
-          ? _Progress(stage: _stage, done: _done, total: _total)
-          : groups.isEmpty
-              ? const Center(
-                  child: Text('Nenhuma cópia idêntica 🎉', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                )
-              : Column(
-                  children: [
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        itemCount: groups.length + 1,
-                        itemBuilder: (context, i) {
-                          if (i == 0) {
-                            return _ReviewProgress(
-                              reviewed: groups.where((g) => g.reviewed).length,
-                              total: groups.length,
-                              files: _copyCount,
-                              bytes: _toFree,
-                            );
-                          }
-                          final group = groups[i - 1];
-                          return _GroupCard(
-                            group: group,
-                            library: widget.library,
-                            onPickKeeper: (path) => setState(() {
-                              group.keeperPath = path;
-                              group.reviewed = true;
-                            }),
-                            onToggleDeleteAll: () => setState(() {
-                              group.keeperPath = group.deleteAll ? chooseKeeper(group.items).path : null;
-                              group.reviewed = true;
-                            }),
-                            onAccept: () => setState(() => group.reviewed = true),
-                            onOpen: _open,
-                          );
-                        },
+    return groups == null
+        ? _Progress(step: _step, label: _label, done: _done, total: _total)
+        : groups.isEmpty
+        ? Center(
+            child: Text(
+              widget.similar ? 'Nada parecido 🎉' : 'Nenhuma cópia idêntica 🎉',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+          )
+        : Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: groups.length + 1,
+                  itemBuilder: (context, i) {
+                    if (i == 0) {
+                      return _ReviewProgress(
+                        reviewed: groups.where((g) => g.reviewed).length,
+                        total: groups.length,
+                        files: _copyCount,
+                        bytes: _toFree,
+                      );
+                    }
+                    final group = groups[i - 1];
+                    return _GroupCard(
+                      group: group,
+                      library: widget.library,
+                      onPickKeeper: (path) => setState(() {
+                        group.keeperPath = path;
+                        group.reviewed = true;
+                      }),
+                      onToggleDeleteAll: () => setState(() {
+                        group.keeperPath = group.deleteAll
+                            ? chooseKeeper(group.items).path
+                            : null;
+                        group.reviewed = true;
+                      }),
+                      onAccept: () => setState(() => group.reviewed = true),
+                      onOpen: _open,
+                    );
+                  },
+                ),
+              ),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.delete,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
-                    ),
-                    SafeArea(
-                      top: false,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.delete,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            onPressed: _markAllAndReview,
-                            child: Text(
-                              'Revisar ${plural(_copyCount, 'arquivo', 'arquivos')} · ${formatBytes(_toFree)}',
-                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                            ),
-                          ),
+                      onPressed: _markAllAndReview,
+                      child: Text(
+                        'Revisar ${plural(_copyCount, 'arquivo', 'arquivos')} · ${formatBytes(_toFree)}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
-    );
+              ),
+            ],
+          );
   }
 }
 
 class _Progress extends StatelessWidget {
-  const _Progress({required this.stage, required this.done, required this.total});
+  const _Progress({
+    required this.step,
+    required this.label,
+    required this.done,
+    required this.total,
+  });
 
-  final ScanStage stage;
+  final String step;
+  final String label;
   final int done;
   final int total;
-
-  String get _label => switch (stage) {
-        ScanStage.partial => 'Comparando começo e fim dos arquivos',
-        ScanStage.full => 'Confirmando cópias (hash completo)',
-      };
 
   @override
   Widget build(BuildContext context) {
@@ -185,12 +283,16 @@ class _Progress extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
-            'Passo ${stage.index + 1} de 2',
-            style: const TextStyle(color: AppColors.muted, fontSize: 12, letterSpacing: 1),
+            step,
+            style: const TextStyle(
+              color: AppColors.muted,
+              fontSize: 12,
+              letterSpacing: 1,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
-            _label,
+            label,
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
@@ -235,7 +337,10 @@ class _ReviewProgress extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -243,13 +348,22 @@ class _ReviewProgress extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  done ? 'Tudo revisado ✓' : '$reviewed de ${plural(total, 'grupo', 'grupos')} revisados',
-                  style: display(17, color: done ? AppColors.keep : AppColors.text),
+                  done
+                      ? 'Tudo revisado ✓'
+                      : '$reviewed de ${plural(total, 'grupo', 'grupos')} revisados',
+                  style: display(
+                    17,
+                    color: done ? AppColors.keep : AppColors.text,
+                  ),
                 ),
               ),
               Text(
                 '${plural(files, 'arquivo', 'arquivos')} · ${formatBytes(bytes)}',
-                style: const TextStyle(color: AppColors.delete, fontWeight: FontWeight.w700, fontSize: 13),
+                style: const TextStyle(
+                  color: AppColors.delete,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
@@ -311,9 +425,15 @@ class _GroupCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: group.deleteAll ? AppColors.delete.withValues(alpha: 0.08) : AppColors.surface,
+        color: group.deleteAll
+            ? AppColors.delete.withValues(alpha: 0.08)
+            : AppColors.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: group.deleteAll ? AppColors.delete.withValues(alpha: 0.5) : Colors.transparent),
+        border: Border.all(
+          color: group.deleteAll
+              ? AppColors.delete.withValues(alpha: 0.5)
+              : Colors.transparent,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,10 +442,17 @@ class _GroupCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  group.deleteAll
-                      ? '${group.items.length}× ${formatBytes(group.bytesEach)}  ·  todas saem'
-                      : '${group.items.length}× ${formatBytes(group.bytesEach)}'
+                  switch ((group.similar, group.deleteAll)) {
+                    (true, true) =>
+                      '${group.items.length} parecidos  ·  todos saem',
+                    (true, false) =>
+                      '${group.items.length} parecidos  ·  ${formatBytes(group.wastedBytes)} sobrando',
+                    (false, true) =>
+                      '${group.items.length}× ${formatBytes(group.bytesEach)}  ·  todas saem',
+                    (false, false) =>
+                      '${group.items.length}× ${formatBytes(group.bytesEach)}'
                           '  ·  ${formatBytes(group.wastedBytes)} sobrando',
+                  },
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: group.deleteAll ? AppColors.delete : AppColors.text,
@@ -335,7 +462,11 @@ class _GroupCard extends StatelessWidget {
               if (group.reviewed)
                 const Padding(
                   padding: EdgeInsets.only(left: 8),
-                  child: Icon(Icons.check_circle_rounded, color: AppColors.keep, size: 20),
+                  child: Icon(
+                    Icons.check_circle_rounded,
+                    color: AppColors.keep,
+                    size: 20,
+                  ),
                 ),
             ],
           ),
@@ -344,11 +475,18 @@ class _GroupCard extends StatelessWidget {
               TextButton.icon(
                 onPressed: onToggleDeleteAll,
                 style: TextButton.styleFrom(
-                  foregroundColor: group.deleteAll ? AppColors.text : AppColors.delete,
+                  foregroundColor: group.deleteAll
+                      ? AppColors.text
+                      : AppColors.delete,
                   visualDensity: VisualDensity.compact,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
-                icon: Icon(group.deleteAll ? Icons.undo_rounded : Icons.delete_sweep_rounded, size: 18),
+                icon: Icon(
+                  group.deleteAll
+                      ? Icons.undo_rounded
+                      : Icons.delete_sweep_rounded,
+                  size: 18,
+                ),
                 label: Text(group.deleteAll ? 'Manter uma' : 'Apagar todas'),
               ),
               const Spacer(),
@@ -367,7 +505,7 @@ class _GroupCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           SizedBox(
-            height: 132,
+            height: group.similar ? 150 : 132, // parecidos têm a linha do tamanho
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: group.items.length,
@@ -379,6 +517,8 @@ class _GroupCard extends StatelessWidget {
                   file: file,
                   library: library,
                   isKeeper: file.path == group.keeperPath,
+                  showSize:
+                      group.similar, // nos parecidos o tamanho de cada um varia
                   onTap: () => onPickKeeper(file.path),
                   onOpen: () => onOpen(file),
                 );
@@ -399,11 +539,13 @@ class _CopyTile extends StatelessWidget {
     required this.isKeeper,
     required this.onTap,
     required this.onOpen,
+    this.showSize = false,
   });
 
   final MediaFile file;
   final MediaLibrary library;
   final bool isKeeper;
+  final bool showSize;
 
   /// Tocar escolhe qual fica; segurar (ou o ícone no canto) abre em tela cheia.
   final VoidCallback onTap;
@@ -412,7 +554,9 @@ class _CopyTile extends StatelessWidget {
   /// ".../WhatsApp Video/Sent/x.mp4" -> "WhatsApp Video/Sent"
   String get _folder {
     final parts = file.folder.split('/').where((p) => p.isNotEmpty).toList();
-    return parts.length <= 2 ? parts.join('/') : parts.sublist(parts.length - 2).join('/');
+    return parts.length <= 2
+        ? parts.join('/')
+        : parts.sublist(parts.length - 2).join('/');
   }
 
   @override
@@ -450,11 +594,21 @@ class _CopyTile extends StatelessWidget {
                       left: 4,
                       top: 4,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(5)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
                         child: Text(
                           isKeeper ? 'FICA' : 'SAI',
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.white),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
                     ),
@@ -469,9 +623,14 @@ class _CopyTile extends StatelessWidget {
                           padding: const EdgeInsets.all(4),
                           child: Container(
                             padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                            decoration: const BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
                             child: Icon(
-                              file.isVideo ? Icons.play_arrow_rounded : Icons.open_in_full_rounded,
+                              file.isVideo
+                                  ? Icons.play_arrow_rounded
+                                  : Icons.open_in_full_rounded,
                               size: 14,
                               color: Colors.white,
                             ),
@@ -484,11 +643,23 @@ class _CopyTile extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
+            if (showSize)
+              Text(
+                formatBytes(file.size),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             Text(
               _folder,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppColors.muted, fontSize: 10, height: 1.2),
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 10,
+                height: 1.2,
+              ),
             ),
           ],
         ),

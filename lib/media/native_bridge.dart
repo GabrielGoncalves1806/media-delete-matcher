@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart';
 
 import 'compression.dart';
+import 'media_file.dart';
+import 'similar_finder.dart';
 
 typedef StorageStats = ({int total, int free, int system});
 
@@ -97,6 +99,18 @@ class NativeBridge {
   }
 
   Future<void> cancelCompression() => _channel.invokeMethod('cancelCompress');
+
+  /// Impressões digitais pra achar mídia parecida (null = não abriu).
+  Future<List<Fingerprint?>> fingerprints(List<MediaFile> files) async {
+    final list = await _channel.invokeListMethod<Object?>('fingerprints', {
+      'paths': [for (final f in files) f.path],
+      'videos': [for (final f in files) f.isVideo],
+    });
+    return [
+      for (final item in list ?? const [])
+        if (item is Map) Fingerprint(item['duration'] as int, (item['hashes'] as List).cast<int>()) else null,
+    ];
+  }
 
   /// Abre o "compartilhar" do Android (WhatsApp, Telegram...). Não copia os
   /// arquivos: o app escolhido lê direto do lugar onde estão.
