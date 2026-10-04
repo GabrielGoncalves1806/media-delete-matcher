@@ -105,7 +105,50 @@ class StorageScan {
   final int listedDirs;
 }
 
-/// Varre [root] atrás de fotos e vídeos, ignorando `.nomedia` de propósito.
+enum ScanPhase {
+  /// Andando pelas pastas e listando o que existe (rápido).
+  listing,
+
+  /// Consultando tamanho e data de cada arquivo (a parte demorada; aqui já se
+  /// sabe o total, então dá pra mostrar progresso de verdade).
+  measuring,
+}
+
+class ScanProgress {
+  const ScanProgress(this.phase, {required this.dirs, required this.files, this.measured = 0});
+
+  final ScanPhase phase;
+  final int dirs;
+
+  /// Arquivos que precisam ser medidos (pastas iguais ao cache não entram).
+  final int files;
+  final int measured;
+
+  /// Null enquanto ainda tá listando (não se sabe o total).
+  double? get fraction => phase == ScanPhase.measuring && files > 0 ? measured / files : null;
+}
+
+/// Uma pasta que mudou: listada na fase 1, medida na fase 2.
+class _DirWork {
+  _DirWork(this.path, this.modified, this.hidden, this.files, this.subdirs);
+
+  final String path;
+  final int modified;
+  final bool hidden;
+  final List<File> files;
+  final List<String> subdirs;
+}
+
+/// Varre [root] atrás de fotos e vídeos. Atalho pra [scanVolumes] com um volume.
+StorageScan scanStorage(
+  String root, {
+  Set<String> skip = const {},
+  Map<String, DirSnapshot> previous = const {},
+  void Function(ScanProgress progress)? onProgress,
+}) =>
+    scanVolumes([root], skip: skip, previous: previous, onProgress: onProgress);
+
+/// Varre os volumes atrás de fotos e vídeos, ignorando `.nomedia` de propósito.
 ///
 /// Mídia dentro de algo que começa com ponto (`.thumbnails`, `.trashed-*` da
 /// lixeira do Android, `.Statuses`...) não entra na lista, mas o tamanho conta
@@ -113,20 +156,28 @@ class StorageScan {
 /// bloqueia; as pastas em [skip] são puladas inteiras.
 ///
 /// Com [previous], só relista as pastas que mudaram desde aquela varredura.
-/// Síncrono: é pra rodar dentro de `Isolate.run`.
-StorageScan scanStorage(
-  String root, {
+/// Em duas fases, pra [onProgress] poder mostrar quanto falta: primeiro lista
+/// as pastas (rápido), depois mede os arquivos (aí o total já é conhecido).
+/// Síncrono: é pra rodar dentro de um isolate.
+StorageScan scanVolumes(
+  List<String> roots, {
   Set<String> skip = const {},
   Map<String, DirSnapshot> previous = const {},
+  void Function(ScanProgress progress)? onProgress,
 }) {
   final now = DateTime.now().millisecondsSinceEpoch;
-  final blocked = {'$root/Android/data', '$root/Android/obb', ...skip};
+  final blocked = {
+    for (final root in roots) ...['$root/Android/data', '$root/Android/obb'],
+    ...skip,
+  };
   final snapshots = <String, DirSnapshot>{};
-  final media = <MediaFile>[];
-  var otherBytes = 0;
-  var listedDirs = 0;
-  final pending = [(path: root, hidden: false)];
+  final work = <_DirWork>[];
+  var dirs = 0;
+  var files = 0;
 
+  // Fase 1: andar pelas pastas. Pasta igual ao cache é reaproveitada; as
+  // outras são listadas e os arquivos ficam pra medir depois.
+  final pending = [for (final root in roots.reversed) (path: root, hidden: false)];
   while (pending.isNotEmpty) {
     final (:path, :hidden) = pending.removeLast();
     final FileStat dirStat;
@@ -138,72 +189,82 @@ StorageScan scanStorage(
     if (dirStat.type != FileSystemEntityType.directory) continue;
     final modified = dirStat.modified.millisecondsSinceEpoch;
 
-    var snapshot = previous[path];
-    if (snapshot == null || snapshot.modified != modified) {
+    final List<String> subdirs;
+    final cached = previous[path];
+    if (cached != null && cached.modified == modified) {
+      snapshots[path] = cached;
+      subdirs = cached.subdirs;
+    } else {
+      final List<FileSystemEntity> entries;
+      try {
+        entries = Directory(path).listSync(followLinks: false);
+      } on FileSystemException {
+        continue; // sem permissão de leitura
+      }
+      subdirs = [for (final e in entries) if (e is Directory) e.path];
+      final dirFiles = entries.whereType<File>().toList();
       // A data da pasta tem precisão de ms: algo criado no mesmo instante em
       // que a pasta é lida não mudaria a data. Pasta mexida há menos de
       // [_settle] não é confiável e fica marcada pra relistar na próxima.
       final trusted = now - modified > _settle.inMilliseconds;
-      final listed = _listDir(path, trusted ? modified : -1, hidden: hidden);
-      if (listed == null) continue; // sem permissão de leitura
-      snapshot = listed;
-      listedDirs++;
+      work.add(_DirWork(path, trusted ? modified : -1, hidden, dirFiles, subdirs));
+      files += dirFiles.length;
     }
 
-    snapshots[path] = snapshot;
-    media.addAll(snapshot.media);
-    otherBytes += snapshot.otherBytes;
-    for (final sub in snapshot.subdirs) {
+    dirs++;
+    if (dirs % 50 == 0) onProgress?.call(ScanProgress(ScanPhase.listing, dirs: dirs, files: files));
+    for (final sub in subdirs.reversed) {
       if (blocked.contains(sub)) continue;
       final name = sub.substring(sub.lastIndexOf('/') + 1);
       pending.add((path: sub, hidden: hidden || name.startsWith('.')));
     }
   }
 
+  // Fase 2: medir os arquivos das pastas que mudaram.
+  var measured = 0;
+  void report() => onProgress?.call(ScanProgress(ScanPhase.measuring, dirs: dirs, files: files, measured: measured));
+  report();
+  for (final dir in work) {
+    snapshots[dir.path] = _measure(dir, onFile: () {
+      measured++;
+      if (measured % 200 == 0) report();
+    });
+  }
+  report();
+
   return StorageScan(
-    media: media,
-    otherBytes: otherBytes,
+    media: [for (final s in snapshots.values) ...s.media],
+    otherBytes: snapshots.values.fold(0, (sum, s) => sum + s.otherBytes),
     snapshots: snapshots,
-    listedDirs: listedDirs,
+    listedDirs: work.length,
   );
 }
 
 const _settle = Duration(seconds: 2);
 
-DirSnapshot? _listDir(String path, int modified, {required bool hidden}) {
-  final List<FileSystemEntity> entries;
-  try {
-    entries = Directory(path).listSync(followLinks: false);
-  } on FileSystemException {
-    return null;
-  }
+DirSnapshot _measure(_DirWork dir, {required void Function() onFile}) {
   final media = <MediaFile>[];
-  final subdirs = <String>[];
   var otherBytes = 0;
-  for (final entry in entries) {
-    if (entry is Directory) {
-      subdirs.add(entry.path);
-      continue;
-    }
-    if (entry is! File) continue;
+  for (final file in dir.files) {
+    onFile();
     final FileStat stat;
     try {
-      stat = entry.statSync();
+      stat = file.statSync();
     } on FileSystemException {
       continue;
     }
-    final name = entry.path.substring(entry.path.lastIndexOf('/') + 1);
-    final video = hidden || name.startsWith('.') ? null : isVideoFile(name);
+    final name = file.path.substring(file.path.lastIndexOf('/') + 1);
+    final video = dir.hidden || name.startsWith('.') ? null : isVideoFile(name);
     if (video == null || stat.size == 0) {
       otherBytes += stat.size;
       continue;
     }
     media.add(MediaFile(
-      path: entry.path,
+      path: file.path,
       size: stat.size,
       modified: stat.modified,
       isVideo: video,
     ));
   }
-  return DirSnapshot(modified: modified, media: media, otherBytes: otherBytes, subdirs: subdirs);
+  return DirSnapshot(modified: dir.modified, media: media, otherBytes: otherBytes, subdirs: dir.subdirs);
 }

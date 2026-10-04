@@ -123,11 +123,15 @@ class MediaLibrary {
   /// Lê o armazenamento. Por padrão só relista as pastas que mudaram desde a
   /// última vez; [full] ignora o cache.
   /// Devolve quantas pastas foram listadas de verdade.
-  Future<int> scan({bool full = false}) async {
+  Future<int> scan({bool full = false, void Function(ScanProgress progress)? onProgress}) async {
     _scanning = true;
     _forgottenDuringScan.clear();
-    final result = await _scanInIsolate(roots, trash.directories, full ? const {} : _snapshots);
-    _scanning = false;
+    final StorageScan result;
+    try {
+      result = await _scanInIsolate(roots, trash.directories, full ? const {} : _snapshots, onProgress);
+    } finally {
+      _scanning = false;
+    }
 
     _snapshots = result.snapshots;
     final gone = Set.of(_forgottenDuringScan);
@@ -138,22 +142,47 @@ class MediaLibrary {
     return result.listedDirs;
   }
 
-  /// Varre todos os volumes num isolate só.
-  /// Estático pra closure do isolate não capturar o `this`.
+  /// Varre todos os volumes num isolate só, repassando o progresso.
+  ///
+  /// Isolate.spawn em vez de Isolate.run: o run só devolve o resultado no fim,
+  /// e aqui o isolate precisa mandar mensagens no caminho. Estático pra closure
+  /// não capturar o `this`.
   static Future<StorageScan> _scanInIsolate(
     List<String> roots,
     Set<String> skip,
     Map<String, DirSnapshot> previous,
-  ) =>
-      Isolate.run(() {
-        final scans = [for (final r in roots) scanStorage(r, skip: skip, previous: previous)];
-        return StorageScan(
-          media: [for (final s in scans) ...s.media],
-          otherBytes: scans.fold(0, (sum, s) => sum + s.otherBytes),
-          snapshots: {for (final s in scans) ...s.snapshots},
-          listedDirs: scans.fold(0, (sum, s) => sum + s.listedDirs),
-        );
-      });
+    void Function(ScanProgress progress)? onProgress,
+  ) async {
+    final port = ReceivePort();
+    try {
+      await Isolate.spawn(_scanEntry, (port.sendPort, roots, skip, previous));
+      await for (final message in port) {
+        switch (message) {
+          case ScanProgress progress:
+            onProgress?.call(progress);
+          case StorageScan result:
+            return result;
+          case String error:
+            throw StateError('A varredura falhou: $error');
+        }
+      }
+      throw StateError('A varredura terminou sem resultado');
+    } finally {
+      port.close();
+    }
+  }
+
+  static void _scanEntry(
+    (SendPort, List<String>, Set<String>, Map<String, DirSnapshot>) args,
+  ) {
+    final (port, roots, skip, previous) = args;
+    try {
+      final result = scanVolumes(roots, skip: skip, previous: previous, onProgress: port.send);
+      Isolate.exit(port, result); // entrega sem copiar
+    } catch (e) {
+      port.send('$e');
+    }
+  }
 
   static List<MediaFile> _sorted(Iterable<MediaFile> files) =>
       files.toList()..sort((a, b) => b.size.compareTo(a.size));

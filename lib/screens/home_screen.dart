@@ -4,6 +4,7 @@ import 'package:shimmer/shimmer.dart';
 
 import '../format.dart';
 import '../media/decision_store.dart';
+import '../media/media_file.dart';
 import '../media/media_filter.dart';
 import '../media/media_library.dart';
 import '../media/native_bridge.dart';
@@ -45,6 +46,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// Atualizando em segundo plano por cima do que veio do cache.
   bool _updating = false;
+
+  /// Progresso da varredura em andamento (null antes da primeira mensagem).
+  ScanProgress? _progress;
+
+  void _onProgress(ScanProgress progress) {
+    if (mounted) setState(() => _progress = progress);
+  }
 
   MediaLibrary get _library => widget.library;
 
@@ -89,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _updating = true;
       });
       _refreshStorage();
-      await _library.scan();
+      await _library.scan(onProgress: _onProgress);
       if (mounted) setState(() => _updating = false);
       _refreshStorage();
     } else {
@@ -108,10 +116,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// Varredura completa, ignorando o cache (refresh manual e primeira vez).
   Future<void> _rescan() async {
-    setState(() => _status = _Status.scanning);
+    setState(() {
+      _status = _Status.scanning;
+      _progress = null;
+    });
     // Relê os volumes: o cartão pode ter sido colocado ou tirado.
     await _library.setVolumes(await _library.native.storageVolumes());
-    await _library.scan(full: true);
+    await _library.scan(full: true, onProgress: _onProgress);
     await _refreshStorage();
     if (mounted) {
       setState(() {
@@ -179,7 +190,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             askedBefore: _askedForAccess,
             permissionOnly: _onboarded,
           ),
-        _Status.scanning => const SafeArea(child: _HomeSkeleton()),
+        _Status.scanning => SafeArea(child: _HomeSkeleton(progress: _progress)),
         _Status.ready => SafeArea(
             child: ListenableBuilder(
               listenable: widget.store,
@@ -210,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _Header(
             onRefresh: _rescan,
             updating: _updating,
+            progress: _progress?.fraction,
             onSearch: () => _push(SearchScreen(library: _library, store: widget.store)),
           ),
           const SizedBox(height: 16),
@@ -293,10 +305,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onRefresh, required this.updating, required this.onSearch});
+  const _Header({
+    required this.onRefresh,
+    required this.updating,
+    required this.onSearch,
+    this.progress,
+  });
 
   final VoidCallback onRefresh;
   final bool updating;
+  final double? progress;
   final VoidCallback onSearch;
 
   @override
@@ -310,7 +328,11 @@ class _Header extends StatelessWidget {
               Text('Mídias', style: display(32)),
               const SizedBox(height: 2),
               Text(
-                updating ? 'Atualizando…' : 'O que tá ocupando teu celular',
+                !updating
+                    ? 'O que tá ocupando teu celular'
+                    : progress == null
+                        ? 'Atualizando…'
+                        : 'Atualizando… ${(progress! * 100).round()}%',
                 style: const TextStyle(color: AppColors.muted, fontSize: 13),
               ),
             ],
@@ -572,9 +594,82 @@ class _DuplicatesButton extends StatelessWidget {
   }
 }
 
+/// O que a varredura tá fazendo e quanto falta, em cima do shimmer.
+class _ScanStatus extends StatelessWidget {
+  const _ScanStatus({required this.progress});
+
+  final ScanProgress? progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = progress;
+    final fraction = p?.fraction;
+    final (String title, String detail) = switch (p) {
+      null => ('Abrindo o armazenamento…', 'Só um instante'),
+      ScanProgress(phase: ScanPhase.listing) => (
+          'Procurando pastas…',
+          '${plural(p.dirs, 'pasta', 'pastas')} · ${plural(p.files, 'arquivo', 'arquivos')} encontrados',
+        ),
+      _ when p.measured >= p.files => ('Organizando do maior pro menor…', 'Quase lá'),
+      _ => (
+          fraction! >= 0.85 ? 'Já já termina…' : 'Medindo os arquivos…',
+          '${formatCount(p.measured)} de ${formatCount(p.files)} · ${(fraction * 100).round()}%',
+        ),
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const SizedBox.square(
+                dimension: 16,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: Text(title, key: ValueKey(title), style: const TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: TweenAnimationBuilder<double>(
+              // anda suave entre uma mensagem e outra do isolate
+              tween: Tween(end: fraction ?? 0),
+              duration: const Duration(milliseconds: 300),
+              builder: (context, value, _) => LinearProgressIndicator(
+                value: fraction == null ? null : value,
+                minHeight: 6,
+                color: AppColors.accent,
+                backgroundColor: AppColors.surface2,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(detail, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+}
+
 /// Esqueleto da home enquanto lê o armazenamento.
 class _HomeSkeleton extends StatelessWidget {
-  const _HomeSkeleton();
+  const _HomeSkeleton({required this.progress});
+
+  final ScanProgress? progress;
 
   @override
   Widget build(BuildContext context) {
@@ -592,11 +687,8 @@ class _HomeSkeleton extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       children: [
         Text('Mídias', style: display(32)),
-        const SizedBox(height: 2),
-        const Text(
-          'Lendo o armazenamento…',
-          style: TextStyle(color: AppColors.muted, fontSize: 13),
-        ),
+        const SizedBox(height: 16),
+        _ScanStatus(progress: progress),
         const SizedBox(height: 16),
         Shimmer.fromColors(
           baseColor: AppColors.surface,

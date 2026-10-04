@@ -101,6 +101,25 @@ void main() {
       expect(second.media.map((f) => f.name).toSet(), {'v.mp4', 'novo.mp4'});
     });
 
+    test('progresso: lista, depois mede até 100%; incremental sem mudança não mede nada', () {
+      for (var i = 0; i < 5; i++) {
+        put('DCIM/Camera/IMG_$i.jpg', size: 10);
+      }
+      put('Download/doc.pdf', size: 3);
+      ageDirs();
+
+      final first = <ScanProgress>[];
+      final scan = scanStorage(root.path, onProgress: first.add);
+      expect(first.last.phase, ScanPhase.measuring);
+      expect(first.last.files, 6);
+      expect(first.last.measured, 6);
+      expect(first.last.fraction, 1.0);
+
+      final second = <ScanProgress>[];
+      scanStorage(root.path, previous: scan.snapshots, onProgress: second.add);
+      expect(second.last.files, 0); // tudo veio do cache
+    });
+
     test('o retrato sobrevive ao JSON', () {
       put('DCIM/Camera/IMG 1.jpg', size: 100);
       put('DCIM/Camera/.hidden/x.bin', size: 3);
